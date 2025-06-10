@@ -1,0 +1,46 @@
+{
+  "extraction_settings": {
+    "fragmentation_threshold": 0.3,
+    "max_value_threshold": 10000,
+    "min_marker_length": 3,
+    "value_lookahead_lines": 3
+  },
+  "exclusion_lists": {
+    "header_keywords": [
+      "patient:", "date:", "lab report", "quest diagnostics", "complete blood",
+      "comprehensive metabolic", "lipid panel", "hormones", "other tests", "thyroid",
+      "khurana", "amandeep", "gender:", "phone:", "patient id:", "requisition:",
+      "collected:", "received:", "reported:", "provider", "labcorp", "client services",
+      "cleveland heartlab", "medical director", "clia", "cap", "page", "report status",
+      "specimen information", "client information", "cardiometabolic", "reference range",
+      "relative risk", "optimal", "moderate", "high", "units", "fatty acids",
+      "medical information", "healthcare providers", "comment report", "footnotes",
+      "performing site"
+    ],
+    "exclude_words": [
+      "date", "patient", "name", "service", "report", "lab", "quest", "diagnostics",
+      "panel", "count"
+    ],
+    "non_lab_keywords": [
+      "patient", "phone", "age", "sex", "specimen", "requisition", "collected",
+      "received", "reported", "client", "reference", "range", "wild health", "quest",
+      "diagnostics", "laboratory", "director", "performing", "site", "clia", "cap",
+      "note", "key", "priority", "out of range"
+    ]
+  },
+  "date_patterns": [
+    "(?:date|collected|drawn|report\\s+date)[\\s:]*([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})",
+    "([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})",
+    "(?:date|collected|drawn|report\\s+date)[\\s:]*([A-Za-z]+\\s+[0-9]{1,2},?\\s+[0-9]{4})",
+    "([A-Za-z]+\\s+[0-9]{1,2},?\\s+[0-9]{4})"
+  ],
+  "value_patterns": [
+    "([^:]+):\\s*([0-9]+\\.?[0-9]*)\\s*([a-zA-Z/%]*)\\s*(?:\\([^)]+\\))?",
+    "([A-Za-z][A-Za-z\\s\\(\\)]+?)\\s+([0-9]+\\.?[0-9]*)\\s*([a-zA-Z/%]*)\\s*(?:\\([^)]+\\))?$",
+    "^([A-Za-z][A-Za-z\\s\\(\\)/®-]+?)\\s+([0-9]+\\.?[0-9]*)\\s+[≥<>0-9\\.\\-\\s%]*$"
+  ],
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}

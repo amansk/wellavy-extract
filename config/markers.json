@@ -1,0 +1,470 @@
+{
+  "default_markers": {
+    "cmp": {
+      "glucose|blood\\s+sugar|fasting\\s+glucose": {
+        "name": "Glucose",
+        "min": 60,
+        "max": 200,
+        "units": "mg/dL"
+      },
+      "calcium": {
+        "name": "Calcium",
+        "min": 8.0,
+        "max": 12.0,
+        "units": "mg/dL"
+      },
+      "sodium|na\\+?": {
+        "name": "Sodium",
+        "min": 130,
+        "max": 150,
+        "units": "mmol/L"
+      },
+      "^potassium$|^k\\+?$": {
+        "name": "Potassium",
+        "min": 3.0,
+        "max": 6.0,
+        "units": "mmol/L"
+      },
+      "co2|carbon\\s+dioxide|bicarbonate": {
+        "name": "CO2 (Bicarbonate)",
+        "min": 18,
+        "max": 32,
+        "units": "mmol/L"
+      },
+      "chloride|cl-?": {
+        "name": "Chloride",
+        "min": 95,
+        "max": 110,
+        "units": "mmol/L"
+      },
+      "albumin": {
+        "name": "Albumin",
+        "min": 3.0,
+        "max": 6.0,
+        "units": "g/dL"
+      },
+      "total\\s+protein": {
+        "name": "Total Protein",
+        "min": 5.0,
+        "max": 9.0,
+        "units": "g/dL"
+      },
+      "alkaline\\s+phosphatase|alk\\s+phos|alp": {
+        "name": "ALP",
+        "min": 30,
+        "max": 150,
+        "units": "U/L"
+      },
+      "alt|alanine\\s+aminotransferase": {
+        "name": "ALT",
+        "min": 5,
+        "max": 100,
+        "units": "U/L"
+      },
+      "ast|aspartate\\s+aminotransferase": {
+        "name": "AST",
+        "min": 5,
+        "max": 100,
+        "units": "U/L"
+      },
+      "bilirubin\\s+\\(total\\)|total\\s+bilirubin": {
+        "name": "Bilirubin (Total)",
+        "min": 0.1,
+        "max": 2.0,
+        "units": "mg/dL"
+      },
+      "bun|blood\\s+urea\\s+nitrogen": {
+        "name": "BUN",
+        "min": 5,
+        "max": 30,
+        "units": "mg/dL"
+      },
+      "creatinine": {
+        "name": "Creatinine",
+        "min": 0.5,
+        "max": 2.0,
+        "units": "mg/dL"
+      }
+    },
+    "cbc": {
+      "(?:white blood cell|wbc|leukocyte)(?:\\s+count)?": {
+        "name": "WBC",
+        "min": 3.0,
+        "max": 15.0,
+        "units": "K/uL"
+      },
+      "(?:red blood cell|rbc|erythrocyte)(?:\\s+count)?": {
+        "name": "RBC",
+        "min": 3.5,
+        "max": 6.5,
+        "units": "M/uL"
+      },
+      "platelet(?:\\s+count)?|plt": {
+        "name": "Platelet Count",
+        "min": 100,
+        "max": 500,
+        "units": "K/uL"
+      },
+      "hemoglobin|hgb|hb": {
+        "name": "Hemoglobin",
+        "min": 10.0,
+        "max": 20.0,
+        "units": "g/dL"
+      },
+      "hematocrit|hct": {
+        "name": "Hematocrit",
+        "min": 30.0,
+        "max": 60.0,
+        "units": "%"
+      },
+      "mcv|mean\\s+corpuscular\\s+volume": {
+        "name": "MCV",
+        "min": 70.0,
+        "max": 110.0,
+        "units": "fL"
+      },
+      "mch(?!\\s*c)|mean\\s+corpuscular\\s+hemoglobin(?!\\s+concentration)": {
+        "name": "MCH",
+        "min": 20.0,
+        "max": 40.0,
+        "units": "pg"
+      },
+      "mchc|mean\\s+corpuscular\\s+hemoglobin\\s+concentration": {
+        "name": "MCHC",
+        "min": 30.0,
+        "max": 40.0,
+        "units": "g/dL"
+      },
+      "rdw|red\\s+cell\\s+distribution\\s+width": {
+        "name": "RDW",
+        "min": 10.0,
+        "max": 20.0,
+        "units": "%"
+      },
+      "platelet(?:\\s+count)?|plt": {
+        "name": "Platelet Count",
+        "min": 100,
+        "max": 500,
+        "units": "K/uL"
+      },
+      "mpv|mean\\s+platelet\\s+volume": {
+        "name": "MPV",
+        "min": 6.0,
+        "max": 15.0,
+        "units": "fL"
+      },
+      "neutrophils?\\s*%?|neut\\s*%?": {
+        "name": "Neutrophils %",
+        "min": 30.0,
+        "max": 80.0,
+        "units": "%"
+      },
+      "lymphocytes?\\s*%?|lymph\\s*%?": {
+        "name": "Lymphocytes %",
+        "min": 15.0,
+        "max": 50.0,
+        "units": "%"
+      },
+      "monocytes?\\s*%?|mono\\s*%?": {
+        "name": "Monocytes %",
+        "min": 2.0,
+        "max": 15.0,
+        "units": "%"
+      },
+      "eosinophils?\\s*%?|eos\\s*%?": {
+        "name": "Eosinophils %",
+        "min": 0.0,
+        "max": 10.0,
+        "units": "%"
+      },
+      "basophils?\\s*%?|baso\\s*%?": {
+        "name": "Basophils %",
+        "min": 0.0,
+        "max": 5.0,
+        "units": "%"
+      }
+    },
+    "hormones": {
+      "testosterone(?!\\s+\\(free\\)|\\s+free)|total\\s+testosterone": {
+        "name": "Testosterone (Total)",
+        "min": 200,
+        "max": 1200,
+        "units": "ng/dL"
+      },
+      "free\\s+testosterone|testosterone\\s+\\(free\\)": {
+        "name": "Testosterone (Free)",
+        "min": 5,
+        "max": 50,
+        "units": "pg/mL"
+      },
+      "dhea\\s+sulfate|dhea-s": {
+        "name": "DHEA Sulfate",
+        "min": 50,
+        "max": 500,
+        "units": "ug/dL"
+      },
+      "estradiol|e2": {
+        "name": "Estradiol",
+        "min": 10,
+        "max": 400,
+        "units": "pg/mL"
+      },
+      "progesterone": {
+        "name": "Progesterone",
+        "min": 0.1,
+        "max": 30.0,
+        "units": "ng/mL"
+      },
+      "fsh|follicle\\s+stimulating\\s+hormone": {
+        "name": "FSH",
+        "min": 1.0,
+        "max": 20.0,
+        "units": "mIU/mL"
+      },
+      "lh|luteinizing\\s+hormone": {
+        "name": "LH",
+        "min": 1.0,
+        "max": 20.0,
+        "units": "mIU/mL"
+      },
+      "shbg|sex\\s+hormone\\s+binding\\s+globulin": {
+        "name": "SHBG",
+        "min": 10,
+        "max": 100,
+        "units": "nmol/L"
+      }
+    },
+    "lipids": {
+      "ldl|low\\s+density\\s+lipoprotein": {
+        "name": "LDL",
+        "min": 50,
+        "max": 300,
+        "units": "mg/dL"
+      },
+      "hdl|high\\s+density\\s+lipoprotein": {
+        "name": "HDL",
+        "min": 20,
+        "max": 100,
+        "units": "mg/dL"
+      },
+      "total\\s+cholesterol|cholesterol\\s+total": {
+        "name": "Total Cholesterol",
+        "min": 100,
+        "max": 400,
+        "units": "mg/dL"
+      },
+      "triglycerides|trig": {
+        "name": "Triglycerides",
+        "min": 30,
+        "max": 500,
+        "units": "mg/dL"
+      },
+      "lp\\(a\\)|lipoprotein\\s*\\(a\\)": {
+        "name": "Lp(a)",
+        "min": 0,
+        "max": 100,
+        "units": "mg/dL"
+      },
+      "apolipoprotein\\s+b|apo\\s*b": {
+        "name": "Apolipoprotein B",
+        "min": 50,
+        "max": 200,
+        "units": "mg/dL"
+      },
+      "omega\\s*-?\\s*3\\s+total|total\\s+omega\\s*-?\\s*3|omegacheck": {
+        "name": "Omega3 Total",
+        "min": 1.0,
+        "max": 15.0,
+        "units": "% by wt"
+      },
+      "omega\\s*-?\\s*6\\s*/\\s*omega\\s*-?\\s*3\\s+ratio": {
+        "name": "Omega-6/Omega-3 Ratio",
+        "min": 1.0,
+        "max": 20.0,
+        "units": "ratio"
+      },
+      "^epa$|eicosapentaenoic\\s+acid": {
+        "name": "EPA",
+        "min": 0.1,
+        "max": 5.0,
+        "units": "% by wt"
+      },
+      "dha|docosahexaenoic\\s+acid": {
+        "name": "DHA",
+        "min": 0.5,
+        "max": 8.0,
+        "units": "% by wt"
+      },
+      "dpa|docosapentaenoic\\s+acid": {
+        "name": "DPA",
+        "min": 0.1,
+        "max": 2.0,
+        "units": "% by wt"
+      },
+      "omega\\s*-?\\s*6\\s+total|total\\s+omega\\s*-?\\s*6": {
+        "name": "Omega 6 Total",
+        "min": 10.0,
+        "max": 45.0,
+        "units": "% by wt"
+      },
+      "^arachidonic\\s+acid$": {
+        "name": "Arachidonic Acid",
+        "min": 5.0,
+        "max": 20.0,
+        "units": "% by wt"
+      },
+      "linoleic\\s+acid": {
+        "name": "Linoleic Acid",
+        "min": 10.0,
+        "max": 30.0,
+        "units": "% by wt"
+      },
+      "^omegacheck$": {
+        "name": "OmegaCheck",
+        "min": 1.0,
+        "max": 15.0,
+        "units": "% by wt"
+      },
+      "arachidonic\\s+acid/epa\\s+ratio": {
+        "name": "Arachidonic Acid/EPA Ratio",
+        "min": 1.0,
+        "max": 50.0,
+        "units": "ratio"
+      }
+    },
+    "metabolic": {
+      "fasting\\s+insulin": {
+        "name": "Fasting Insulin",
+        "min": 2,
+        "max": 30,
+        "units": "uIU/mL"
+      },
+      "hscrp|hs\\s*-?\\s*crp|high\\s+sensitivity\\s+c\\s*-?\\s*reactive\\s+protein": {
+        "name": "hsCRP",
+        "min": 0.1,
+        "max": 10.0,
+        "units": "mg/L"
+      },
+      "hba1c|hemoglobin\\s+a1c|glycated\\s+hemoglobin|a1c": {
+        "name": "HbA1C",
+        "min": 4.0,
+        "max": 15.0,
+        "units": "%"
+      },
+      "homocysteine": {
+        "name": "Homocysteine",
+        "min": 4.0,
+        "max": 20.0,
+        "units": "umol/L"
+      },
+      "uric\\s+acid": {
+        "name": "Uric Acid",
+        "min": 2.0,
+        "max": 10.0,
+        "units": "mg/dL"
+      },
+      "ferritin": {
+        "name": "Ferritin",
+        "min": 10,
+        "max": 500,
+        "units": "ng/mL"
+      },
+      "iron(?!\\s+binding)": {
+        "name": "Iron",
+        "min": 50,
+        "max": 200,
+        "units": "ug/dL"
+      },
+      "tibc|total\\s+iron\\s+binding\\s+capacity": {
+        "name": "TIBC",
+        "min": 200,
+        "max": 500,
+        "units": "ug/dL"
+      },
+      "psa|prostate\\s+specific\\s+antigen": {
+        "name": "PSA",
+        "min": 0.1,
+        "max": 20.0,
+        "units": "ng/mL"
+      }
+    },
+    "vitamins": {
+      "vitamin\\s+d|25\\s*-?\\s*oh\\s+vitamin\\s+d": {
+        "name": "Vitamin D",
+        "min": 10,
+        "max": 100,
+        "units": "ng/mL"
+      }
+    },
+    "thyroid": {
+      "tsh|thyroid\\s+stimulating\\s+hormone": {
+        "name": "TSH",
+        "min": 0.5,
+        "max": 10.0,
+        "units": "mIU/L"
+      },
+      "free\\s+t4|ft4": {
+        "name": "Free T4",
+        "min": 0.8,
+        "max": 2.5,
+        "units": "ng/dL"
+      },
+      "free\\s+t3|ft3": {
+        "name": "Free T3",
+        "min": 2.0,
+        "max": 5.0,
+        "units": "pg/mL"
+      }
+    }
+  },
+  "other_markers": {
+    "vitamin\\s+b12|b12": {
+      "name": "Vitamin B12",
+      "min": 200,
+      "max": 1000,
+      "units": "pg/mL"
+    },
+    "folate|folic\\s+acid": {
+      "name": "Folate",
+      "min": 2.0,
+      "max": 20.0,
+      "units": "ng/mL"
+    },
+    "transferrin": {
+      "name": "Transferrin",
+      "min": 200,
+      "max": 400,
+      "units": "mg/dL"
+    },
+    "direct\\s+bilirubin|bilirubin\\s+direct": {
+      "name": "Direct Bilirubin",
+      "min": 0.0,
+      "max": 0.5,
+      "units": "mg/dL"
+    },
+    "cortisol": {
+      "name": "Cortisol",
+      "min": 5,
+      "max": 30,
+      "units": "ug/dL"
+    },
+    "prolactin": {
+      "name": "Prolactin",
+      "min": 2,
+      "max": 25,
+      "units": "ng/mL"
+    },
+    "igf\\s*-?\\s*1|insulin\\s+like\\s+growth\\s+factor": {
+      "name": "IGF-1",
+      "min": 50,
+      "max": 400,
+      "units": "ng/mL"
+    },
+    "egfr|estimated\\s+glomerular\\s+filtration\\s+rate": {
+      "name": "eGFR",
+      "min": 60,
+      "max": 120,
+      "units": "mL/min/1.73m2"
+    }
+  }
+}
