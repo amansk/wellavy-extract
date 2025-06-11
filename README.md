@@ -1,3 +1,5 @@
+Created by vibe coding with Claude Code. Excuse the code quality.
+
 # Blood Test PDF to CSV Extractor
 
 A robust CLI tool to extract blood test information from lab report PDFs and output the results as CSV files. Supports multiple lab formats including Quest Diagnostics, LabCorp, and Cleveland HeartLab.
