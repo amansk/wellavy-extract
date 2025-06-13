@@ -903,6 +903,48 @@ class BloodTestExtractor:
         return default_data, other_data, date
 
 
+def generate_csv_content(default_data: List[Tuple[str, str]], other_data: List[Tuple[str, str]], date: str) -> str:
+    """
+    Generate CSV content as a string from extracted blood test data.
+    
+    Args:
+        default_data: List of (marker, value) tuples for default markers
+        other_data: List of (marker, value) tuples for other markers
+        date: Date string for the report
+        
+    Returns:
+        CSV content as a string
+    """
+    import io
+    
+    # Combine all data into single CSV (preserving order from default_data)
+    all_data = default_data + other_data
+    
+    if not all_data:
+        return ""
+    
+    # Create CSV content in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Marker', date])
+    for marker, value in all_data:
+        writer.writerow([marker, value])
+    
+    return output.getvalue()
+
+
+def save_csv_to_file(csv_content: str, output_path: Path) -> None:
+    """
+    Save CSV content to a file.
+    
+    Args:
+        csv_content: The CSV content as a string
+        output_path: Path where to save the CSV file
+    """
+    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        csvfile.write(csv_content)
+
+
 @click.command()
 @click.argument('pdf_file', type=click.Path(exists=True))
 @click.option('--output', '-o', help='Output CSV file path (default: same name as PDF with .csv extension)')
@@ -945,18 +987,15 @@ def main(pdf_file: str, output: Optional[str], verbose: bool, config_dir: str):
             main_output = output_path
             other_output = output_path.with_name(f"{output_path.stem}_other{output_path.suffix}")
         
-        # Combine all data into single CSV (preserving order from default_data)
-        all_data = default_data + other_data
+        # Generate CSV content using the reusable function
+        csv_content = generate_csv_content(default_data, other_data, date)
         
-        if all_data:
-            with open(main_output, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(['Marker Name', date])
-                for marker, value in all_data:
-                    writer.writerow([marker, value])
+        if csv_content:
+            save_csv_to_file(csv_content, main_output)
             
             click.echo(f"CSV file created: {main_output}")
             if verbose:
+                all_data = default_data + other_data
                 click.echo(f"Total markers extracted: {len(all_data)}")
                 for marker, value in all_data:
                     click.echo(f"  {marker}: {value}")
