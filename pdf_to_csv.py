@@ -769,14 +769,14 @@ class BloodTestExtractor:
         """Initialize all component classes."""
         try:
             markers_config = self.config_loader.load_markers()
-            settings = self.config_loader.load_settings()
+            self.settings = self.config_loader.load_settings()
             
             self.validator = ValueValidator(markers_config)
-            self.pattern_matcher = PatternMatcher(markers_config, settings)
-            self.text_processor = TextProcessor(settings)
+            self.pattern_matcher = PatternMatcher(markers_config, self.settings)
+            self.text_processor = TextProcessor(self.settings)
             self.date_extractor = DateExtractor(self.pattern_matcher)
             self.lab_extractor = LabReportExtractor(
-                self.pattern_matcher, self.validator, self.text_processor, settings
+                self.pattern_matcher, self.validator, self.text_processor, self.settings
             )
             
             self.logger.info("BloodTestExtractor initialized successfully")
@@ -834,48 +834,30 @@ class BloodTestExtractor:
             raise Exception(error_msg)
     
     def extract_blood_test_data(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
-        """Extract blood test markers and values from text."""
+        """Extract blood test markers and values from text using new architecture."""
         try:
-            # Determine extraction strategy - prioritize structured formats
-            has_cleveland_lab = 'cleveland heartlab' in text.lower()
-            has_fatty_acids = 'omegacheck' in text.lower() or 'fatty acids' in text.lower()
-            has_comprehensive_data = any(marker in text.lower() for marker in 
-                                       ['white blood cell', 'hemoglobin', 'glucose', 'creatinine', 'cholesterol'])
-            has_analyte_value = 'analyte' in text.lower() and 'value' in text.lower()
+            # Import here to avoid circular imports
+            from extractors.format_detector import FormatDetector
+            from extractors.extractor_factory import ExtractorFactory
             
-            # Prioritize Analyte/Value structure when present (standard Quest format)
-            if has_analyte_value:
-                self.logger.info("Using Analyte/Value extraction method")
-                return self.lab_extractor.extract_standard_format(text)
+            # Create format detector and determine format
+            format_detector = FormatDetector(self.settings)
+            detected_format = format_detector.detect_format(text)
             
-            # Check for combination reports (Cleveland + LabCorp) - only when NO Analyte/Value structure
-            elif (has_cleveland_lab and has_fatty_acids and has_comprehensive_data):
-                self.logger.info("Using combination extraction method (LabCorp + Cleveland HeartLab)")
-                
-                # Extract from both LabCorp (specific) and Cleveland sections
-                labcorp_default, labcorp_other = self.lab_extractor.extract_labcorp_format(text)
-                cleveland_default, cleveland_other = self.lab_extractor.extract_cleveland_heartlab_format(text)
-                
-                # Combine results, removing duplicates
-                combined_default = labcorp_default + cleveland_default
-                combined_other = labcorp_other + cleveland_other
-                
-                return (self.lab_extractor._remove_duplicates_preserve_order(combined_default), 
-                        self.lab_extractor._remove_duplicates_preserve_order(combined_other))
+            self.logger.info(f"Detected format: {detected_format.value}")
             
-            elif (has_cleveland_lab and has_fatty_acids and 
-                'cardiometabolic report' in text.lower() and not has_comprehensive_data):
-                
-                self.logger.info("Using Cleveland HeartLab extraction method")
-                return self.lab_extractor.extract_cleveland_heartlab_format(text)
+            # Create appropriate extractor
+            extractor_factory = ExtractorFactory(
+                self.pattern_matcher, 
+                self.validator, 
+                self.text_processor, 
+                self.settings
+            )
             
-            elif self.text_processor.detect_fragmentation(text):
-                self.logger.info("Using fragmented report extraction method")
-                return self.lab_extractor.extract_fragmented_format(text)
+            extractor = extractor_factory.create_extractor(detected_format)
             
-            else:
-                self.logger.info("Using standard extraction method")
-                return self.lab_extractor.extract_standard_format(text)
+            # Extract data using format-specific extractor
+            return extractor.extract(text)
                 
         except Exception as e:
             self.logger.error(f"Error during blood test data extraction: {e}")
