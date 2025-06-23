@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
@@ -32,12 +32,16 @@ async def root():
     return {"status": "healthy", "message": "PDF to CSV Converter API is running"}
 
 @app.post("/convert")
-async def convert_pdf_to_csv(file: UploadFile = File(...)):
+async def convert_pdf_to_csv(
+    file: UploadFile = File(...),
+    include_ranges: bool = Query(False, description="Include reference ranges (MinRange, MaxRange) in output")
+):
     """
     Convert a blood test PDF report to CSV format.
     
     Args:
         file: The PDF file to convert
+        include_ranges: Whether to include reference ranges in the output
         
     Returns:
         CSV file as a downloadable attachment
@@ -57,7 +61,7 @@ async def convert_pdf_to_csv(file: UploadFile = File(...)):
             extractor = BloodTestExtractor()
             
             # Process the PDF
-            default_results, other_results, date = extractor.process_pdf(temp_pdf_path)
+            default_results, other_results, date = extractor.process_pdf(temp_pdf_path, include_ranges)
             
             if not default_results and not other_results:
                 raise HTTPException(
@@ -66,7 +70,7 @@ async def convert_pdf_to_csv(file: UploadFile = File(...)):
                 )
             
             # Generate CSV content using the same function as the CLI script
-            csv_content = generate_csv_content(default_results, other_results, date)
+            csv_content = generate_csv_content(default_results, other_results, date, include_ranges)
             
             if not csv_content:
                 raise HTTPException(

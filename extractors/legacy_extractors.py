@@ -27,7 +27,7 @@ class FragmentedExtractor(BaseExtractor):
         threshold = self.settings.get('extraction_settings', {}).get('fragmentation_threshold', 0.3)
         return fragmentation_ratio > threshold
     
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from fragmented lab reports."""
         default_results = []
         other_results = []
@@ -87,7 +87,7 @@ class FragmentedExtractor(BaseExtractor):
         
         return None
     
-    def _extract_specific_fragmented_patterns(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def _extract_specific_fragmented_patterns(self, text: str) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract using specific patterns for severely fragmented data."""
         default_results = []
         other_results = []
@@ -135,7 +135,7 @@ class StandardExtractor(BaseExtractor):
         """This extractor can handle any text as a fallback."""
         return True
     
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract using standard patterns."""
         all_results = []  # Single list to preserve order
         
@@ -154,15 +154,21 @@ class StandardExtractor(BaseExtractor):
             if not line or self.text_processor.is_header_line(line):
                 continue
             
-            marker_value_pairs = self._extract_marker_value_pairs(line)
-            for marker, value in marker_value_pairs:
-                if self._is_valid_extraction(marker, value):
-                    all_results.append((marker, value))
+            marker_value_pairs = self._extract_marker_value_pairs(line, include_ranges)
+            for item in marker_value_pairs:
+                if include_ranges and len(item) == 4:
+                    marker, value, min_range, max_range = item
+                    if self._is_valid_extraction(marker, value):
+                        all_results.append((marker, value, min_range, max_range))
+                elif len(item) >= 2:
+                    marker, value = item[:2]
+                    if self._is_valid_extraction(marker, value):
+                        all_results.append((marker, value))
         
         # Remove duplicates while preserving order
         return self._remove_duplicates_preserve_order(all_results), []
     
-    def _extract_analyte_value_format(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def _extract_analyte_value_format(self, text: str) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from lab reports with Analyte/Value structure, preserving order."""
         all_results = []  # Single list to preserve order
         lines = text.split('\n')
@@ -239,17 +245,33 @@ class StandardExtractor(BaseExtractor):
         # Remove duplicates while preserving order
         return self._remove_duplicates_preserve_order(all_results), []
     
-    def _extract_marker_value_pairs(self, line: str) -> List[Tuple[str, str]]:
+    def _extract_marker_value_pairs(self, line: str, include_ranges: bool = False) -> List[Tuple]:
         """Extract marker-value pairs from a line."""
         pairs = []
         
-        # First try Vibrant America format: "Test Name (units) Value Reference"
+        # First try Vibrant America format with range capture: "Test Name (units) Value Range"
+        if include_ranges:
+            # Pattern to capture range: "Iron (ug/dL) 76 59~158"
+            vibrant_pattern_with_range = re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/0-9\*]+?)\s+\([^)]+\)\s+([0-9]+\.?[0-9]*)\s*[HL]?\s+([0-9\.\~≤≥<>\s]+).*$')
+            vibrant_match = vibrant_pattern_with_range.match(line)
+            if vibrant_match:
+                marker = vibrant_match.group(1).strip()
+                value = vibrant_match.group(2).strip()
+                range_str = vibrant_match.group(3).strip()
+                min_range, max_range = self._parse_range(range_str)
+                pairs.append((marker, value, min_range, max_range))
+                return pairs
+        
+        # Original Vibrant America format without ranges: "Test Name (units) Value Reference"
         vibrant_pattern = re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/0-9\*]+?)\s+\([^)]+\)\s+([0-9]+\.?[0-9]*)\s+.*$')
         vibrant_match = vibrant_pattern.match(line)
         if vibrant_match:
             marker = vibrant_match.group(1).strip()
             value = vibrant_match.group(2).strip()
-            pairs.append((marker, value))
+            if include_ranges:
+                pairs.append((marker, value, None, None))
+            else:
+                pairs.append((marker, value))
             return pairs
         
         # Try standard patterns

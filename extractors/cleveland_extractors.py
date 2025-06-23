@@ -29,7 +29,7 @@ class ClevelandHeartLabExtractor(BaseExtractor):
         return (has_cleveland and has_fatty_acids and 
                 (has_cardiometabolic or not has_comprehensive_data))
     
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from Cleveland HeartLab format."""
         default_results = []
         other_results = []

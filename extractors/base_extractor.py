@@ -24,11 +24,17 @@ class BaseExtractor(ABC):
         pass
     
     @abstractmethod
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract blood test data from text.
         
+        Args:
+            text: The text to extract from
+            include_ranges: Whether to include reference ranges in the output
+            
         Returns:
-            Tuple of (default_markers, other_markers) where each is a list of (marker, value) tuples
+            Tuple of (default_markers, other_markers) where each is a list of tuples:
+            - Without ranges: (marker, value)
+            - With ranges: (marker, value, min_range, max_range)
         """
         pass
     
@@ -47,40 +53,122 @@ class BaseExtractor(ABC):
         
         return self.validator.validate_value(marker, value)
     
-    def _categorize_marker(self, marker: str, value: str, default_results: List, other_results: List):
+    def _categorize_marker(self, marker: str, value: str, default_results: List, other_results: List, 
+                          min_range: str = None, max_range: str = None):
         """Categorize marker into default or other results using shared logic."""
         default_name = self.pattern_matcher.match_default_marker(marker)
         if default_name:
-            default_results.append((default_name, value))
+            if min_range is not None or max_range is not None:
+                default_results.append((default_name, value, min_range, max_range))
+            else:
+                default_results.append((default_name, value))
             return
         
         other_name = self.pattern_matcher.match_other_marker(marker)
         if other_name:
-            other_results.append((other_name, value))
+            if min_range is not None or max_range is not None:
+                other_results.append((other_name, value, min_range, max_range))
+            else:
+                other_results.append((other_name, value))
         else:
             # Clean and add to other
             cleaned_name = self.text_processor.clean_marker_name(marker)
             if len(cleaned_name) > 2:
-                other_results.append((cleaned_name, value))
+                if min_range is not None or max_range is not None:
+                    other_results.append((cleaned_name, value, min_range, max_range))
+                else:
+                    other_results.append((cleaned_name, value))
     
-    def _remove_duplicates_preserve_order(self, results: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def _remove_duplicates_preserve_order(self, results: List[Tuple]) -> List[Tuple]:
         """Remove duplicate marker-value pairs while preserving order."""
         seen = set()
         unique_results = []
-        for marker, value in results:
-            key = (marker.lower(), value)
-            if key not in seen:
-                seen.add(key)
-                unique_results.append((marker, value))
+        for result in results:
+            # Handle both 2-tuple and 4-tuple formats
+            if len(result) >= 2:
+                marker, value = result[0], result[1]
+                key = (marker.lower(), value)
+                if key not in seen:
+                    seen.add(key)
+                    unique_results.append(result)
         return unique_results
     
-    def _remove_duplicates(self, results: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def _remove_duplicates(self, results: List[Tuple]) -> List[Tuple]:
         """Remove duplicate marker-value pairs."""
         seen = set()
         unique_results = []
-        for marker, value in results:
-            key = (marker.lower(), value)
-            if key not in seen:
-                seen.add(key)
-                unique_results.append((marker, value))
+        for result in results:
+            # Handle both 2-tuple and 4-tuple formats
+            if len(result) >= 2:
+                marker, value = result[0], result[1]
+                key = (marker.lower(), value)
+                if key not in seen:
+                    seen.add(key)
+                    unique_results.append(result)
         return unique_results
+    
+    def _parse_range(self, range_str: str) -> Tuple[str, str]:
+        """Parse a range string into min and max values.
+        
+        Args:
+            range_str: The range string to parse (e.g., "10-50", "<100", ">40")
+            
+        Returns:
+            Tuple of (min_range, max_range) where either can be None for unbounded ranges
+        """
+        import re
+        
+        if not range_str:
+            return None, None
+        
+        range_str = range_str.strip()
+        
+        # Handle different range formats
+        # Format: "10-50" or "10 - 50"
+        if '-' in range_str and not range_str.startswith('-'):
+            parts = range_str.split('-')
+            if len(parts) == 2:
+                try:
+                    min_val = parts[0].strip()
+                    max_val = parts[1].strip()
+                    # Validate they're numeric
+                    float(min_val)
+                    float(max_val)
+                    return min_val, max_val
+                except ValueError:
+                    pass
+        
+        # Format: "10~50" (tilde separator)
+        if '~' in range_str:
+            parts = range_str.split('~')
+            if len(parts) == 2:
+                try:
+                    min_val = parts[0].strip()
+                    max_val = parts[1].strip()
+                    float(min_val)
+                    float(max_val)
+                    return min_val, max_val
+                except ValueError:
+                    pass
+        
+        # Format: "<100" or "≤100"
+        less_than_match = re.match(r'^[<≤]\s*([0-9]+\.?[0-9]*)', range_str)
+        if less_than_match:
+            return None, less_than_match.group(1)
+        
+        # Format: ">40" or "≥40"
+        greater_than_match = re.match(r'^[>≥]\s*([0-9]+\.?[0-9]*)', range_str)
+        if greater_than_match:
+            return greater_than_match.group(1), None
+        
+        # Format: "<=100"
+        less_equal_match = re.match(r'^<=\s*([0-9]+\.?[0-9]*)', range_str)
+        if less_equal_match:
+            return None, less_equal_match.group(1)
+        
+        # Format: ">=40"
+        greater_equal_match = re.match(r'^>=\s*([0-9]+\.?[0-9]*)', range_str)
+        if greater_equal_match:
+            return greater_equal_match.group(1), None
+        
+        return None, None

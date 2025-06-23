@@ -25,16 +25,27 @@ class LabCorpNMRExtractor(BaseExtractor):
         ]
         return any(indicator in text for indicator in nmr_indicators)
     
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from LabCorp NMR LipoProfile format."""
         all_results = []
         lines = text.split('\n')
         
-        # LabCorp patterns - covers multiple format types in LabCorp reports
-        patterns = [
-            # Pattern 1: CBC/CMP format with 02 code - standard format
-            # "WBC 02 6.2 7.0 10/24/2024 x10E3/uL 3.4-10.8"
-            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+02\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[0-9]*\.?[0-9]*\s+[0-9/]+\s+[a-zA-Z/0-9%E]+\s+.*$'),
+        if include_ranges:
+            # Patterns that capture ranges
+            patterns = [
+                # Pattern with range at end: "WBC 02 6.2 7.0 10/24/2024 x10E3/uL 3.4-10.8"
+                re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+02\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[0-9]*\.?[0-9]*\s+[0-9/]+\s+[a-zA-Z/0-9%E]+\s+([0-9\.\-<>=\s]+)$'),
+                # Pattern with A,01 code and range: "LDL-P A, 01 1258 High 961 02/27/2025 nmol/L <1000"
+                re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A,\s*01\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[0-9]*\.?[0-9]*\s+[0-9/]+\s+[a-zA-Z/0-9%]+\s+([0-9\.\-<>=\s]+)$'),
+                # Simpler pattern with range: "Glucose 02 101 High 95 02/27/2025 mg/dL 70-99"
+                re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+(?:02|0[1-4]|[AB],\s*0[1-4])\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+.*\s+([0-9\.\-<>=\s]+)$'),
+            ]
+        else:
+            # Original patterns without range capture
+            patterns = [
+                # Pattern 1: CBC/CMP format with 02 code - standard format
+                # "WBC 02 6.2 7.0 10/24/2024 x10E3/uL 3.4-10.8"
+                re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+02\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[0-9]*\.?[0-9]*\s+[0-9/]+\s+[a-zA-Z/0-9%E]+\s+.*$'),
             
             # Pattern 2: CBC/CMP format with special values like >2000
             # "Vitamin B12 02 1082 >2000 02/27/2025 pg/mL 232-1245"
@@ -103,7 +114,13 @@ class LabCorpNMRExtractor(BaseExtractor):
                     
                     # Validate extraction
                     if self._is_valid_nmr_extraction(marker_name, value):
-                        all_results.append((marker_name, value))
+                        if include_ranges and len(match.groups()) >= 3:
+                            # Extract range if available
+                            range_str = match.group(3).strip() if match.group(3) else ""
+                            min_range, max_range = self._parse_range(range_str)
+                            all_results.append((marker_name, value, min_range, max_range))
+                        else:
+                            all_results.append((marker_name, value))
                     break  # Stop trying patterns once we find a match
         
         # Remove duplicates while preserving order
@@ -168,7 +185,7 @@ class LabCorpStandardExtractor(BaseExtractor):
         
         return has_labcorp_codes and not is_nmr
     
-    def extract(self, text: str) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from standard LabCorp format."""
         all_results = []
         lines = text.split('\n')
