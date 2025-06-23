@@ -833,7 +833,7 @@ class BloodTestExtractor:
             self.logger.error(error_msg)
             raise Exception(error_msg)
     
-    def extract_blood_test_data(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
+    def extract_blood_test_data(self, text: str, include_ranges: bool = False, force_format: Optional[str] = None) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract blood test markers and values from text using new architecture.
         
         Args:
@@ -850,11 +850,21 @@ class BloodTestExtractor:
             from extractors.format_detector import FormatDetector
             from extractors.extractor_factory import ExtractorFactory
             
-            # Create format detector and determine format
-            format_detector = FormatDetector(self.settings)
-            detected_format = format_detector.detect_format(text)
-            
-            self.logger.info(f"Detected format: {detected_format.value}")
+            # Determine format (either forced or auto-detected)
+            if force_format:
+                # Map user format to internal format
+                from extractors.format_detector import ReportFormat
+                format_mapping = {
+                    'quest': ReportFormat.QUEST_ANALYTE_VALUE,
+                    'labcorp': ReportFormat.LABCORP_NMR  # Default to NMR, will fall back if needed
+                }
+                detected_format = format_mapping.get(force_format.lower())
+                self.logger.info(f"Using forced format: {detected_format.value}")
+            else:
+                # Auto-detect format
+                format_detector = FormatDetector(self.settings)
+                detected_format = format_detector.detect_format(text)
+                self.logger.info(f"Auto-detected format: {detected_format.value}")
             
             # Create appropriate extractor
             extractor_factory = ExtractorFactory(
@@ -873,7 +883,7 @@ class BloodTestExtractor:
             self.logger.error(f"Error during blood test data extraction: {e}")
             raise
     
-    def process_pdf(self, pdf_path: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple], str]:
+    def process_pdf(self, pdf_path: str, include_ranges: bool = False, force_format: Optional[str] = None) -> Tuple[List[Tuple], List[Tuple], str]:
         """Process PDF and extract blood test data with date.
         
         Args:
@@ -898,7 +908,7 @@ class BloodTestExtractor:
         self.logger.info(f"Extracted date: {date}")
         
         # Extract blood test data
-        default_data, other_data = self.extract_blood_test_data(text, include_ranges)
+        default_data, other_data = self.extract_blood_test_data(text, include_ranges, force_format)
         
         self.logger.info(f"Extracted {len(default_data)} default markers and {len(other_data)} other markers")
         
@@ -969,8 +979,9 @@ def save_csv_to_file(csv_content: str, output_path: Path) -> None:
 @click.option('--output', '-o', help='Output CSV file path (default: same name as PDF with .csv extension)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--include-ranges', '-r', is_flag=True, help='Include reference ranges (MinRange, MaxRange) in output')
+@click.option('--format', type=click.Choice(['quest', 'labcorp'], case_sensitive=False), help='Force specific lab format (auto-detects if not specified)')
 @click.option('--config-dir', default='config', help='Configuration directory path')
-def main(pdf_file: str, output: Optional[str], verbose: bool, include_ranges: bool, config_dir: str):
+def main(pdf_file: str, output: Optional[str], verbose: bool, include_ranges: bool, format: Optional[str], config_dir: str):
     """
     Extract blood test information from lab report PDFs and convert to CSV.
     
@@ -991,7 +1002,7 @@ def main(pdf_file: str, output: Optional[str], verbose: bool, include_ranges: bo
             click.echo(f"Processing PDF: {pdf_file}")
         
         # Process the PDF
-        default_data, other_data, date = extractor.process_pdf(pdf_file, include_ranges)
+        default_data, other_data, date = extractor.process_pdf(pdf_file, include_ranges, format)
         
         if not default_data and not other_data:
             click.echo("Warning: No blood test data found in the PDF", err=True)
@@ -1017,7 +1028,10 @@ def main(pdf_file: str, output: Optional[str], verbose: bool, include_ranges: bo
             if verbose:
                 all_data = default_data + other_data
                 click.echo(f"Total markers extracted: {len(all_data)}")
-                for marker, value in all_data:
+                for item in all_data:
+                    # Handle both 2-tuple and 4-tuple formats
+                    marker = item[0]
+                    value = item[1]
                     click.echo(f"  {marker}: {value}")
         
         if verbose:

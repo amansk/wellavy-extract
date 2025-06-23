@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from typing import Optional
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
@@ -34,7 +35,8 @@ async def root():
 @app.post("/convert")
 async def convert_pdf_to_csv(
     file: UploadFile = File(...),
-    include_ranges: bool = Query(False, description="Include reference ranges (MinRange, MaxRange) in output")
+    include_ranges: bool = Query(False, description="Include reference ranges (MinRange, MaxRange) in output"),
+    format: Optional[str] = Query(None, description="Force specific lab format: 'quest' or 'labcorp' (auto-detects if not specified)")
 ):
     """
     Convert a blood test PDF report to CSV format.
@@ -42,6 +44,7 @@ async def convert_pdf_to_csv(
     Args:
         file: The PDF file to convert
         include_ranges: Whether to include reference ranges in the output
+        format: Force specific lab format ('quest' or 'labcorp'), auto-detects if not specified
         
     Returns:
         CSV file as a downloadable attachment
@@ -61,7 +64,7 @@ async def convert_pdf_to_csv(
             extractor = BloodTestExtractor()
             
             # Process the PDF
-            default_results, other_results, date = extractor.process_pdf(temp_pdf_path, include_ranges)
+            default_results, other_results, date = extractor.process_pdf(temp_pdf_path, include_ranges, format)
             
             if not default_results and not other_results:
                 raise HTTPException(

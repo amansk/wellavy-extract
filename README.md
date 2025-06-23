@@ -6,12 +6,16 @@ A robust CLI tool to extract blood test information from lab report PDFs and out
 
 ## Features
 
-- **Multi-format Support**: Handles Quest Diagnostics (Analyte/Value), LabCorp, and Cleveland HeartLab formats
+- **Multi-format Support**: Handles Quest Diagnostics (Analyte/Value), LabCorp, and Vibrant America formats
 - **Intelligent Format Detection**: Automatically detects and uses the appropriate extraction method
+- **Optional Format Override**: Force specific lab format (`--format=quest` or `--format=labcorp`) when needed
+- **Reference Range Extraction**: Optional extraction of reference ranges with `--include-ranges` flag
 - **Comprehensive Extraction**: Extracts 80+ markers including CBC, CMP, hormones, lipids, and fatty acids
 - **Single CSV Output**: All markers in one file, preserving the original PDF order
+- **Flexible Output Formats**: Standard CSV or enhanced CSV with reference ranges
 - **Date Auto-detection**: Automatically extracts test dates from PDF content
 - **Value Validation**: Validates extracted values against realistic medical ranges
+- **API Support**: FastAPI web service for programmatic access
 - **Fallback PDF Reading**: Uses PyPDF2 with pdfplumber fallback for robust text extraction
 - **Configurable**: JSON-based configuration for markers and extraction settings
 
@@ -53,9 +57,24 @@ This creates: `results.csv` with all extracted markers.
 python3 pdf_to_csv.py your_lab_report.pdf --verbose
 ```
 
+### Extract with Reference Ranges
+```bash
+python3 pdf_to_csv.py your_lab_report.pdf --include-ranges
+# or
+python3 pdf_to_csv.py your_lab_report.pdf -r
+```
+
+### Force Specific Lab Format
+```bash
+python3 pdf_to_csv.py your_lab_report.pdf --format quest
+python3 pdf_to_csv.py your_lab_report.pdf --format labcorp
+```
+
 ### Command Line Options
 - `--output, -o`: Specify the output CSV file path
 - `--verbose, -v`: Enable verbose output to see extracted data
+- `--include-ranges, -r`: Include reference ranges (MinRange, MaxRange) in output
+- `--format`: Force specific lab format (`quest` or `labcorp`) - auto-detects if not specified
 - `--config-dir`: Specify custom configuration directory (default: config)
 - `--help`: Show help message
 
@@ -103,6 +122,7 @@ Vitamin D, Vitamin B12, Vitamin B6, Folate (Serum & RBC), Hemoglobin A1c, Insuli
 
 ## Output Format
 
+### Standard CSV Format
 The CSV file contains all extracted markers in the order they appear in the PDF:
 ```csv
 Marker Name,2024-04-04
@@ -118,6 +138,22 @@ TESTOSTERONE, TOTAL, MS,589
 VITAMIN D, 25-OH, TOTAL,42.6
 ```
 
+### CSV Format with Reference Ranges
+When using the `--include-ranges` flag, the CSV includes reference range columns:
+```csv
+Marker,MinRange,MaxRange,2025-06-10
+LDL-P,,1000,1258
+LDL-C (NIH Calc),0,99,113
+HDL-C,39,,69
+Triglycerides,0,149,40
+Glucose,70,99,101
+BUN,6,24,15
+Creatinine,0.57,1.00,0.67
+WBC,3.4,10.8,6.2
+Hemoglobin,11.1,15.9,14.4
+TSH,0.450,4.500,1.240
+```
+
 ## Installation as a Command Line Tool
 
 To install as a system-wide command:
@@ -129,6 +165,42 @@ pip3 install -e .
 Then you can use it as:
 ```bash
 pdf-to-csv your_lab_report.pdf
+```
+
+## API Usage
+
+The tool includes a FastAPI web service for programmatic access:
+
+```bash
+# Start the API server
+python api.py
+```
+
+### API Endpoints
+
+**POST** `/convert` - Convert PDF to CSV
+
+Query Parameters:
+- `include_ranges` (boolean, optional): Include reference ranges in output (default: false)
+- `format` (string, optional): Force specific lab format (`quest` or `labcorp`) - auto-detects if not specified
+
+**Example API Calls:**
+
+```bash
+# Basic conversion
+curl -X POST "http://localhost:8000/convert" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@your_lab_report.pdf"
+
+# With reference ranges
+curl -X POST "http://localhost:8000/convert?include_ranges=true" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@your_lab_report.pdf"
+
+# Force specific format with ranges
+curl -X POST "http://localhost:8000/convert?include_ranges=true&format=quest" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@your_lab_report.pdf"
 ```
 
 ## Real Examples
