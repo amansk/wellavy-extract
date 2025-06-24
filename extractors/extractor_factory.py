@@ -9,6 +9,8 @@ from .format_detector import ReportFormat
 from .labcorp_extractors import LabCorpNMRExtractor, LabCorpStandardExtractor
 from .quest_extractors import QuestAnalyteValueExtractor
 from .cleveland_extractors import ClevelandHeartLabExtractor
+from .boston_heart_extractors import BostonHeartExtractor
+from .elation_extractors import ElationLabCorpExtractor, ElationQuestExtractor
 from .legacy_extractors import FragmentedExtractor, StandardExtractor
 
 
@@ -29,6 +31,9 @@ class ExtractorFactory:
             ReportFormat.LABCORP_STANDARD: LabCorpStandardExtractor,
             ReportFormat.QUEST_ANALYTE_VALUE: QuestAnalyteValueExtractor,
             ReportFormat.CLEVELAND_HEARTLAB: ClevelandHeartLabExtractor,
+            ReportFormat.BOSTON_HEART: BostonHeartExtractor,
+            ReportFormat.ELATION_LABCORP: ElationLabCorpExtractor,
+            ReportFormat.ELATION_QUEST: ElationQuestExtractor,
             ReportFormat.FRAGMENTED: FragmentedExtractor,
             ReportFormat.STANDARD: StandardExtractor,
         }

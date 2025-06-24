@@ -15,6 +15,9 @@ class ReportFormat(Enum):
     LABCORP_ANALYTE_VALUE = "labcorp_analyte_value"
     QUEST_ANALYTE_VALUE = "quest_analyte_value"
     CLEVELAND_HEARTLAB = "cleveland_heartlab"
+    BOSTON_HEART = "boston_heart"
+    ELATION_LABCORP = "elation_labcorp"
+    ELATION_QUEST = "elation_quest"
     FRAGMENTED = "fragmented"
     STANDARD = "standard"
 
@@ -40,6 +43,14 @@ class FormatDetector:
         # Cleveland HeartLab patterns
         self.cleveland_pattern = re.compile(r'cleveland heartlab', re.IGNORECASE)
         self.fatty_acids_pattern = re.compile(r'omegacheck|fatty acids', re.IGNORECASE)
+        
+        # Boston Heart patterns
+        self.boston_heart_pattern = re.compile(r'boston heart', re.IGNORECASE)
+        self.framingham_pattern = re.compile(r'200 crossing blvd.*framingham', re.IGNORECASE)
+        
+        # Elation patterns
+        self.elation_header_pattern = re.compile(r'Test Name\s+Value\s+Reference Range\s+Loc', re.IGNORECASE)
+        self.elation_labcorp_pattern = re.compile(r'^[A-Za-z][A-Za-z\s\-,\(\)®™/]+\s+\d+\.?\d*\s+.*\s+01\s*$', re.MULTILINE)
     
     def detect_format(self, text: str) -> ReportFormat:
         """Detect the format of the lab report.
@@ -52,7 +63,16 @@ class FormatDetector:
         """
         text_lower = text.lower()
         
-        # Check for LabCorp formats first (most specific to least specific)
+        # Check for Elation formats first (more specific)
+        if self._is_elation_labcorp(text):
+            self.logger.info("Detected Elation LabCorp format")
+            return ReportFormat.ELATION_LABCORP
+        
+        if self._is_elation_quest(text):
+            self.logger.info("Detected Elation Quest format")
+            return ReportFormat.ELATION_QUEST
+        
+        # Check for LabCorp formats (most specific to least specific)
         if self._is_labcorp_nmr(text):
             self.logger.info("Detected LabCorp NMR LipoProfile format")
             return ReportFormat.LABCORP_NMR
@@ -70,6 +90,11 @@ class FormatDetector:
         if self._is_cleveland_heartlab(text):
             self.logger.info("Detected Cleveland HeartLab format")
             return ReportFormat.CLEVELAND_HEARTLAB
+        
+        # Check for Boston Heart
+        if self._is_boston_heart(text):
+            self.logger.info("Detected Boston Heart Diagnostics format")
+            return ReportFormat.BOSTON_HEART
         
         # Check for fragmented format
         if self._is_fragmented(text):
@@ -135,6 +160,60 @@ class FormatDetector:
         return (has_cleveland and has_fatty_acids and 
                 (has_cardiometabolic or not has_comprehensive_data))
     
+    def _is_boston_heart(self, text: str) -> bool:
+        """Check if text matches Boston Heart Diagnostics format."""
+        text_lower = text.lower()
+        
+        # Look for Boston Heart specific indicators
+        boston_heart_indicators = [
+            'boston heart',
+            '200 crossing blvd',
+            'framingham, ma',
+            'ernst j. schaefer',
+            'clia# 22d2100622',
+            'nysdoh: 9021'
+        ]
+        
+        # Proprietary test indicators
+        proprietary_tests = [
+            'boston heart hdl map',
+            'boston heart cholesterol balance',
+            'boston heart fatty acid balance',
+            'hdl map®',
+            'cholesterol balance®',
+            'fatty acid balance™'
+        ]
+        
+        has_boston_heart = any(indicator in text_lower for indicator in boston_heart_indicators)
+        has_proprietary = any(test in text_lower for test in proprietary_tests)
+        
+        # Look for three-tier risk categorization (unique to Boston Heart)
+        has_risk_tiers = ('optimal' in text_lower and 
+                         'borderline' in text_lower and 
+                         'increased risk' in text_lower)
+        
+        return has_boston_heart or has_proprietary or has_risk_tiers
+    
+    def _is_elation_labcorp(self, text: str) -> bool:
+        """Check if text matches Elation-formatted LabCorp report."""
+        # Look for Elation header format
+        has_elation_header = bool(self.elation_header_pattern.search(text))
+        
+        # Look for simplified LabCorp format with location codes at end
+        has_elation_labcorp_format = bool(self.elation_labcorp_pattern.search(text))
+        
+        # Look for LabCorp indicators
+        has_labcorp = any(code in text for code in [' 01', ' 02', ' 03', ' 04'])
+        
+        # Must have Elation formatting AND LabCorp codes
+        return (has_elation_header or has_elation_labcorp_format) and has_labcorp
+    
+    def _is_elation_quest(self, text: str) -> bool:
+        """Check if text matches Elation-formatted Quest report."""
+        # Placeholder for future implementation
+        # Will need to identify Quest + Elation specific formatting
+        return False
+    
     def _is_fragmented(self, text: str) -> bool:
         """Check if text appears to be fragmented."""
         lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -170,6 +249,21 @@ class FormatDetector:
                 "description": "Cleveland HeartLab fatty acid analysis",
                 "key_indicators": ["Cleveland HeartLab", "OmegaCheck", "fatty acids"],
                 "typical_pattern": "Marker Value Range % by wt"
+            },
+            ReportFormat.BOSTON_HEART: {
+                "description": "Boston Heart Diagnostics with three-tier risk categorization",
+                "key_indicators": ["Boston Heart", "Framingham MA", "Ernst J. Schaefer", "HDL Map®"],
+                "typical_pattern": "Marker Optimal Borderline IncreasedRisk Units Value"
+            },
+            ReportFormat.ELATION_LABCORP: {
+                "description": "LabCorp report printed through Elation EMR with simplified format",
+                "key_indicators": ["Test Name Value Reference Range Loc", "location codes at end"],
+                "typical_pattern": "Marker Value Range Units LocationCode"
+            },
+            ReportFormat.ELATION_QUEST: {
+                "description": "Quest report printed through Elation EMR (future support)",
+                "key_indicators": ["Elation formatting", "Quest markers"],
+                "typical_pattern": "TBD - Future implementation"
             },
             ReportFormat.FRAGMENTED: {
                 "description": "Fragmented report with markers and values on separate lines",
