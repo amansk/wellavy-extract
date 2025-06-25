@@ -18,6 +18,7 @@ class ReportFormat(Enum):
     BOSTON_HEART = "boston_heart"
     ELATION_LABCORP = "elation_labcorp"
     ELATION_QUEST = "elation_quest"
+    FUNCTION_HEALTH = "function_health"
     FRAGMENTED = "fragmented"
     STANDARD = "standard"
 
@@ -51,6 +52,10 @@ class FormatDetector:
         # Elation patterns
         self.elation_header_pattern = re.compile(r'Test Name\s+Value\s+Reference Range\s+Loc', re.IGNORECASE)
         self.elation_labcorp_pattern = re.compile(r'^[A-Za-z][A-Za-z\s\-,\(\)®™/]+\s+\d+\.?\d*\s+.*\s+01\s*$', re.MULTILINE)
+        
+        # Function Health patterns
+        self.function_health_pattern = re.compile(r'function dashboard', re.IGNORECASE)
+        self.function_health_url_pattern = re.compile(r'my\.functionhealth\.com', re.IGNORECASE)
     
     def detect_format(self, text: str) -> ReportFormat:
         """Detect the format of the lab report.
@@ -95,6 +100,11 @@ class FormatDetector:
         if self._is_boston_heart(text):
             self.logger.info("Detected Boston Heart Diagnostics format")
             return ReportFormat.BOSTON_HEART
+        
+        # Check for Function Health
+        if self._is_function_health(text):
+            self.logger.info("Detected Function Health Dashboard format")
+            return ReportFormat.FUNCTION_HEALTH
         
         # Check for fragmented format
         if self._is_fragmented(text):
@@ -214,6 +224,21 @@ class FormatDetector:
         # Will need to identify Quest + Elation specific formatting
         return False
     
+    def _is_function_health(self, text: str) -> bool:
+        """Check if text matches Function Health Dashboard format."""
+        # Look for Function Health specific indicators
+        has_function_dashboard = bool(self.function_health_pattern.search(text))
+        has_function_url = bool(self.function_health_url_pattern.search(text))
+        
+        # Look for status indicators
+        has_status_indicators = ('In Range' in text and 'Out of Range' in text)
+        
+        # Look for biomarker count pattern
+        has_biomarker_pattern = bool(re.search(r'\d+Biomarkers', text))
+        
+        # Must have Function Health identifiers
+        return (has_function_dashboard or has_function_url) and (has_status_indicators or has_biomarker_pattern)
+    
     def _is_fragmented(self, text: str) -> bool:
         """Check if text appears to be fragmented."""
         lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -264,6 +289,11 @@ class FormatDetector:
                 "description": "Quest report printed through Elation EMR (future support)",
                 "key_indicators": ["Elation formatting", "Quest markers"],
                 "typical_pattern": "TBD - Future implementation"
+            },
+            ReportFormat.FUNCTION_HEALTH: {
+                "description": "Function Health Dashboard export with two-line biomarker format",
+                "key_indicators": ["Function Dashboard", "my.functionhealth.com", "In Range Out of Range"],
+                "typical_pattern": "Biomarker Name\\nStatus Value Unit"
             },
             ReportFormat.FRAGMENTED: {
                 "description": "Fragmented report with markers and values on separate lines",

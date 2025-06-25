@@ -1,0 +1,209 @@
+"""
+Function Health-specific extractor for Function Health Dashboard reports.
+"""
+
+import re
+from typing import List, Tuple
+from .base_extractor import BaseExtractor
+
+
+class FunctionHealthExtractor(BaseExtractor):
+    """Extractor for Function Health Dashboard reports."""
+    
+    @property
+    def format_name(self) -> str:
+        return "Function Health Dashboard"
+    
+    def can_extract(self, text: str) -> bool:
+        """Check if this extractor can handle the text."""
+        function_health_indicators = [
+            'Function Dashboard',
+            'my.functionhealth.com',
+            'In Range Out of Range Improving',
+            'Biomarkers'
+        ]
+        return any(indicator in text for indicator in function_health_indicators)
+    
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
+        """Extract from Function Health Dashboard format using two-line parsing."""
+        all_results = []
+        lines = text.split('\n')
+        
+        # Function Health uses a two-line format:
+        # Line 1: Biomarker Name
+        # Line 2: Status Value Unit
+        
+        i = 0
+        while i < len(lines) - 1:
+            current_line = lines[i].strip()
+            next_line = lines[i + 1].strip()
+            
+            if not current_line or not next_line:
+                i += 1
+                continue
+            
+            # Skip header/footer and navigation lines
+            if self._should_skip_line(current_line):
+                i += 1
+                continue
+            
+            # Check if next line matches a status pattern
+            status_match = self._parse_status_line(next_line)
+            if status_match:
+                marker_name = self._clean_marker_name(current_line)
+                status, value, unit = status_match
+                
+                # Validate this looks like a real biomarker
+                if self._is_valid_function_health_extraction(marker_name, value):
+                    if include_ranges:
+                        # Function Health doesn't provide reference ranges, 
+                        # but we can infer from status
+                        min_range, max_range = self._infer_range_from_status(status, value)
+                        all_results.append((marker_name, value, min_range, max_range))
+                    else:
+                        all_results.append((marker_name, value))
+                
+                # Skip the next line since we processed it
+                i += 2
+            else:
+                i += 1
+        
+        # Remove duplicates while preserving order
+        return self._remove_duplicates_preserve_order(all_results), []
+    
+    def _should_skip_line(self, line: str) -> bool:
+        """Check if line should be skipped."""
+        skip_patterns = [
+            # Header patterns
+            r'^\d+/\d+/\d+.*pm.*function dashboard',
+            r'^your health.*function dashboard',
+            r'^https://my\.functionhealth\.com',
+            r'^\d+biomarkers',
+            r'^in range out of range improving',
+            r'^\d+\s+\d+\s+\d+$',  # Status counts
+            
+            # Navigation and category headers
+            r'^autoimmunity$', r'^biological age$', r'^blood$', r'^electrolytes$',
+            r'^environmental toxins$', r'^heart$', r'^immune regulation$', r'^kidney$',
+            r'^liver$', r'^male health$', r'^metabolic$', r'^nutrients$', r'^pancreas$',
+            r'^stress & aging$', r'^thyroid$', r'^urine$',
+            
+            # Page elements
+            r'^page \d+ of \d+$',
+            r'^\d+/\d+/\d+.*\d+:\d+\s+[ap]m$',
+            
+            # Very short lines that are likely not biomarkers
+            r'^.{1,2}$',
+        ]
+        
+        return any(re.search(pattern, line.lower()) for pattern in skip_patterns)
+    
+    def _parse_status_line(self, line: str) -> Tuple[str, str, str]:
+        """Parse status line to extract status, value, and unit."""
+        # Pattern 1: Numeric with unit - "In Range 14.3 g/dL"
+        match = re.match(r'^(In Range|Above Range|Below Range|Younger)\s+(-?\d+\.?\d*)\s+(.+)$', line)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+        
+        # Pattern 2: Percentage - "In Range 43.9 %"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+(\d+\.?\d*)\s*%$', line)
+        if match:
+            return match.group(1), match.group(2), "%"
+        
+        # Pattern 3: Less than values - "In Range <10 IU/mL"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+(<\d+\.?\d*)\s+(.+)$', line)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+        
+        # Pattern 4: Qualitative results - "In Range Negative"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+(Negative|Positive|Normal|Abnormal)$', line)
+        if match:
+            return match.group(1), match.group(2), ""
+        
+        # Pattern 5: Special values like blood type - "In Range O"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+([A-Z]+)$', line)
+        if match:
+            return match.group(1), match.group(2), ""
+        
+        # Pattern 6: Color values - "In Range Yellow"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+(Yellow|Clear|Red|Brown|Orange)$', line)
+        if match:
+            return match.group(1), match.group(2), ""
+        
+        return None
+    
+    def _clean_marker_name(self, marker_name: str) -> str:
+        """Clean and standardize marker names."""
+        # Remove common prefixes/suffixes that aren't part of the marker name
+        marker_name = marker_name.strip()
+        
+        # Handle special cases
+        replacements = {
+            'HDL-c': 'HDL-C',
+            'LDL-c': 'LDL-C',
+            'TSH (Thyroid Stimulating Hormone)': 'TSH',
+            'T4 (Thyroxine), Free': 'Free T4',
+            'T3 (Triiodothyronine), Free': 'Free T3',
+        }
+        
+        return replacements.get(marker_name, marker_name)
+    
+    def _is_valid_function_health_extraction(self, marker: str, value: str) -> bool:
+        """Validate Function Health extractions."""
+        marker = marker.strip()
+        value = value.strip()
+        
+        # Skip very short or empty markers
+        if len(marker) < 2:
+            return False
+        
+        # Skip if marker looks like a page element
+        if re.match(r'^\d+$', marker):  # Just numbers
+            return False
+        
+        if re.match(r'^page \d+', marker.lower()):
+            return False
+        
+        # Skip if value is empty (unless it's a qualitative result)
+        if not value:
+            return False
+        
+        # Allow qualitative values
+        qualitative_values = ['negative', 'positive', 'normal', 'abnormal', 'yellow', 'clear', 'o', 'a', 'b', 'ab']
+        if value.lower() in qualitative_values:
+            return True
+        
+        # For numeric values, basic validation
+        if not re.match(r'^[<>]?\d+\.?\d*$', value.replace('<', '').replace('>', '')):
+            # Allow special cases like blood types
+            if value.upper() in ['O', 'A', 'B', 'AB']:
+                return True
+            return False
+        
+        return True
+    
+    def _infer_range_from_status(self, status: str, value: str) -> Tuple[str, str]:
+        """Infer reference ranges from Function Health status indicators."""
+        # Function Health doesn't provide explicit ranges, but we can make basic inferences
+        # This is a simplified approach - could be enhanced with actual range data
+        
+        if status == "In Range":
+            return "", ""  # Normal, no specific range to infer
+        elif status == "Above Range":
+            return "", value  # Value is above normal, so it's the minimum of "high"
+        elif status == "Below Range":
+            return value, ""  # Value is below normal, so it's the maximum of "low"
+        else:
+            return "", ""
+    
+    def _extract_date_from_header(self, text: str) -> str:
+        """Extract date from Function Health header."""
+        # Look for date pattern like "6/16/25, 4:07 PM"
+        date_match = re.search(r'(\d{1,2}/\d{1,2}/\d{2}),?\s+\d{1,2}:\d{2}\s+[AP]M', text)
+        if date_match:
+            date_str = date_match.group(1)
+            # Convert to standard format (assuming 2025 for 25)
+            month, day, year = date_str.split('/')
+            full_year = f"20{year}" if int(year) < 50 else f"19{year}"
+            return f"{full_year}-{month.zfill(2)}-{day.zfill(2)}"
+        return ""

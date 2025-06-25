@@ -11,6 +11,7 @@ from .quest_extractors import QuestAnalyteValueExtractor
 from .cleveland_extractors import ClevelandHeartLabExtractor
 from .boston_heart_extractors import BostonHeartExtractor
 from .elation_extractors import ElationLabCorpExtractor, ElationQuestExtractor
+from .function_health_extractors import FunctionHealthExtractor
 from .legacy_extractors import FragmentedExtractor, StandardExtractor
 
 
@@ -34,6 +35,7 @@ class ExtractorFactory:
             ReportFormat.BOSTON_HEART: BostonHeartExtractor,
             ReportFormat.ELATION_LABCORP: ElationLabCorpExtractor,
             ReportFormat.ELATION_QUEST: ElationQuestExtractor,
+            ReportFormat.FUNCTION_HEALTH: FunctionHealthExtractor,
             ReportFormat.FRAGMENTED: FragmentedExtractor,
             ReportFormat.STANDARD: StandardExtractor,
         }
