@@ -7,12 +7,12 @@ import logging
 from .base_extractor import BaseExtractor
 from .format_detector import ReportFormat
 from .labcorp_extractors import LabCorpNMRExtractor, LabCorpStandardExtractor
-from .quest_extractors import QuestAnalyteValueExtractor
+from .quest_extractors import QuestAnalyteValueExtractor, QuestTabularExtractor
 from .cleveland_extractors import ClevelandHeartLabExtractor
 from .boston_heart_extractors import BostonHeartExtractor
 from .elation_extractors import ElationLabCorpExtractor, ElationQuestExtractor
 from .function_health_extractors import FunctionHealthExtractor
-from .legacy_extractors import FragmentedExtractor, StandardExtractor
+from .legacy_extractors import FragmentedExtractor
 
 
 class ExtractorFactory:
@@ -31,13 +31,13 @@ class ExtractorFactory:
             ReportFormat.LABCORP_NMR: LabCorpNMRExtractor,
             ReportFormat.LABCORP_STANDARD: LabCorpStandardExtractor,
             ReportFormat.QUEST_ANALYTE_VALUE: QuestAnalyteValueExtractor,
+            ReportFormat.QUEST_TABULAR: QuestTabularExtractor,
             ReportFormat.CLEVELAND_HEARTLAB: ClevelandHeartLabExtractor,
             ReportFormat.BOSTON_HEART: BostonHeartExtractor,
             ReportFormat.ELATION_LABCORP: ElationLabCorpExtractor,
             ReportFormat.ELATION_QUEST: ElationQuestExtractor,
             ReportFormat.FUNCTION_HEALTH: FunctionHealthExtractor,
             ReportFormat.FRAGMENTED: FragmentedExtractor,
-            ReportFormat.STANDARD: StandardExtractor,
         }
     
     def create_extractor(self, format_type: ReportFormat) -> BaseExtractor:

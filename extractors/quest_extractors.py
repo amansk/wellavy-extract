@@ -243,3 +243,167 @@ class QuestAnalyteValueExtractor(BaseExtractor):
             return False
         
         return True
+
+
+class QuestTabularExtractor(BaseExtractor):
+    """Extractor for Quest Diagnostics tabular format."""
+    
+    @property
+    def format_name(self) -> str:
+        return "Quest Tabular"
+    
+    def can_extract(self, text: str) -> bool:
+        """Check if this extractor can handle the text."""
+        text_lower = text.lower()
+        
+        # Look for Quest-specific indicators
+        quest_indicators = ['quest diagnostics', 'questdiagnostics']
+        has_quest = any(indicator in text_lower for indicator in quest_indicators)
+        
+        # Look for tabular header pattern
+        has_tabular_header = bool(re.search(r'Test Name.*?(?:In Range|Out Of Range|Reference Range)', text, re.IGNORECASE))
+        
+        return has_quest and has_tabular_header
+    
+    def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
+        """Extract from Quest tabular format."""
+        all_results = []
+        lines = text.split('\n')
+        
+        # Multiple patterns for different Quest tabular formats
+        patterns = [
+            # Pattern 1: TEST_NAME VALUE FLAG RANGE UNITS [LAB]
+            re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/-]+?)\s+([\d<>]+\.?\d*)\s+([HL])\s+([\d\-<>\.]+)\s+(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 2: TEST_NAME VALUE RANGE UNITS [LAB] (no flag)
+            re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/-]+?)\s+([\d<>]+\.?\d*)\s+([\d\-<>\.]+)\s+(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 3: TEST_NAME VALUE UNITS (no range)
+            re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/-]+?)\s+([\d<>]+\.?\d*)\s+([%a-zA-Z/]+)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 4: TEST_NAME SEE NOTE: RANGE UNITS
+            re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/-]+?)\s+SEE NOTE:\s+([\d\-<>\.]+)\s+(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 5: Complex test names with numbers (IGF 1, LC/MS)
+            re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/\d-]+?)\s+([\d<>]+\.?\d*)\s+([HL])?\s*([\d\-<>\.]*)\s*(.+?)(?:\s+[A-Z]{2})?$'),
+        ]
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip header lines and empty lines
+            if not line or any(header in line.upper() for header in ['TEST NAME', 'REFERENCE RANGE', 'IN RANGE', 'OUT OF RANGE', 'LAB']):
+                continue
+                
+            # Skip obvious non-test lines
+            if any(skip in line.upper() for skip in ['PATIENT', 'COLLECTED', 'REPORTED', 'PAGE', 'DOB', 'SEX']):
+                continue
+            
+            # Try each pattern until one matches
+            matched = False
+            for pattern in patterns:
+                match = pattern.match(line)
+                if match:
+                    groups = match.groups()
+                    marker_name = groups[0].strip()
+                    
+                    # Handle different pattern structures
+                    if 'SEE NOTE:' in line:
+                        # Pattern 4: special note format
+                        value = None  # Will need to extract from note
+                        range_part = groups[1] if len(groups) > 1 else None
+                        continue  # Skip SEE NOTE entries for now
+                    elif len(groups) >= 3:
+                        value = groups[1].strip()
+                        
+                        # Determine if group 2 is flag or range
+                        flag = None
+                        range_part = None
+                        units_and_lab = None
+                        
+                        if len(groups) >= 4 and groups[2] in ['H', 'L']:
+                            # Has flag
+                            flag = groups[2]
+                            range_part = groups[3] if len(groups) > 3 and groups[3] else None
+                            units_and_lab = groups[4] if len(groups) > 4 else None
+                        elif len(groups) >= 3:
+                            # No flag, group 2 might be range or units
+                            if re.match(r'^[\d\-<>\.]+$', groups[2]):
+                                range_part = groups[2]
+                                units_and_lab = groups[3] if len(groups) > 3 else None
+                            else:
+                                units_and_lab = groups[2]
+                        
+                        if self._is_valid_tabular_extraction(marker_name, value):
+                            if include_ranges and range_part:
+                                min_range, max_range = self._parse_quest_range(range_part)
+                                all_results.append((marker_name, value, min_range, max_range))
+                            else:
+                                all_results.append((marker_name, value))
+                            matched = True
+                            break
+            
+            # Debug: log unmatched lines (remove in production)
+            if not matched and len(line) > 10 and not any(skip in line.upper() for skip in ['PATIENT', 'COLLECTED', 'REPORTED', 'PAGE', 'DOB']):
+                pass  # Could log for debugging: print(f"Unmatched: {line}")
+        
+        # Remove duplicates while preserving order
+        return self._remove_duplicates_preserve_order(all_results), []
+    
+    def _parse_quest_range(self, range_str: str) -> Tuple[str, str]:
+        """Parse Quest-specific range formats."""
+        range_str = range_str.strip()
+        
+        # Handle different Quest range formats
+        # Format: "min-max"
+        if '-' in range_str and not range_str.startswith('<') and not range_str.startswith('>'):
+            parts = range_str.split('-')
+            if len(parts) == 2:
+                try:
+                    min_val = parts[0].strip()
+                    max_val = parts[1].strip()
+                    float(min_val)  # Validate numeric
+                    float(max_val)
+                    return min_val, max_val
+                except ValueError:
+                    pass
+        
+        # Format: "<value" (upper limit)
+        less_than_match = re.match(r'^<\s*([0-9]+\.?[0-9]*)', range_str)
+        if less_than_match:
+            return None, less_than_match.group(1)
+        
+        # Format: ">value" (lower limit)
+        greater_than_match = re.match(r'^>\s*([0-9]+\.?[0-9]*)', range_str)
+        if greater_than_match:
+            return greater_than_match.group(1), None
+        
+        return None, None
+    
+    def _is_valid_tabular_extraction(self, marker: str, value: str) -> bool:
+        """Validate tabular extractions."""
+        marker = marker.strip().upper()
+        
+        # Skip obvious non-markers
+        if any(skip in marker for skip in ['PATIENT', 'PHONE', 'CLIENT', 'REQUISITION', 
+                                          'COLLECTED', 'REPORTED', 'REFERENCE', 'RANGE',
+                                          'KHURANA', 'WILD HEALTH', 'LEXINGTON', 'PAGE',
+                                          'FAX', 'SPECIMEN', 'COLLECTED', 'RECEIVED']):
+            return False
+        
+        # Skip very short markers
+        if len(marker) < 3:
+            return False
+        
+        # Validate value is reasonable
+        try:
+            # Handle comparison operators in values
+            clean_value = re.sub(r'^[<>]', '', value)
+            float_val = float(clean_value)
+            # Reject negative values and extremely high values
+            if float_val < 0 or float_val > 100000:
+                return False
+        except ValueError:
+            return False
+        
+        return True

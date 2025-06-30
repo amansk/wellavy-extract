@@ -100,6 +100,7 @@ class FunctionHealthExtractor(BaseExtractor):
     
     def _parse_status_line(self, line: str) -> Tuple[str, str, str]:
         """Parse status line to extract status, value, and unit."""
+        # First try patterns for normal text
         # Pattern 1: Numeric with unit - "In Range 14.3 g/dL"
         match = re.match(r'^(In Range|Above Range|Below Range|Younger)\s+(-?\d+\.?\d*)\s+(.+)$', line)
         if match:
@@ -130,12 +131,38 @@ class FunctionHealthExtractor(BaseExtractor):
         if match:
             return match.group(1), match.group(2), ""
         
+        # Now try patterns for spaced text (e.g., "I n  R a n g e 1 4 . 3 g/dL")
+        # Pattern 7: Spaced numeric with unit - "I n  R a n g e 1 4 . 3 g/dL"
+        match = re.match(r'^(I n\s+R a n g e|A b o v e\s+R a n g e|B e l o w\s+R a n g e|Y o u n g e r)\s+([\d\s\.]+)\s+(.+)$', line)
+        if match:
+            status = match.group(1).replace(' ', '')  # "InRange"
+            # Convert status back to normal format
+            status_map = {'InRange': 'In Range', 'AboveRange': 'Above Range', 'BelowRange': 'Below Range', 'Younger': 'Younger'}
+            status = status_map.get(status, status)
+            value = match.group(2).replace(' ', '')  # "14.3"
+            unit = match.group(3)
+            return status, value, unit
+        
+        # Pattern 8: Spaced qualitative - "I n  R a n g e N e g a t i v e"
+        match = re.match(r'^(I n\s+R a n g e|A b o v e\s+R a n g e|B e l o w\s+R a n g e)\s+(N e g a t i v e|P o s i t i v e)$', line)
+        if match:
+            status = match.group(1).replace(' ', '')
+            status_map = {'InRange': 'In Range', 'AboveRange': 'Above Range', 'BelowRange': 'Below Range'}
+            status = status_map.get(status, status)
+            value = match.group(2).replace(' ', '')  # "Negative"
+            return status, value, ""
+        
         return None
     
     def _clean_marker_name(self, marker_name: str) -> str:
         """Clean and standardize marker names."""
         # Remove common prefixes/suffixes that aren't part of the marker name
         marker_name = marker_name.strip()
+        
+        # Handle spaced text - remove extra spaces between characters
+        # e.g., "H e m o g l o b i n" -> "Hemoglobin"
+        if re.match(r'^[A-Z]\s+[a-z]', marker_name):
+            marker_name = re.sub(r'\s+', '', marker_name)
         
         # Handle special cases
         replacements = {
@@ -144,6 +171,12 @@ class FunctionHealthExtractor(BaseExtractor):
             'TSH (Thyroid Stimulating Hormone)': 'TSH',
             'T4 (Thyroxine), Free': 'Free T4',
             'T3 (Triiodothyronine), Free': 'Free T3',
+            # Add spaced versions
+            'Hemoglobin': 'Hemoglobin',
+            'MeanCorpuscularVolume(MCV)': 'Mean Corpuscular Volume (MCV)',
+            'TotalCholesterol': 'Total Cholesterol',
+            'LDL-Cholesterol': 'LDL-Cholesterol',
+            'TestosteroneTotal': 'Testosterone, Total',
         }
         
         return replacements.get(marker_name, marker_name)

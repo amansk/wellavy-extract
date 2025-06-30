@@ -864,6 +864,11 @@ class BloodTestExtractor:
                 # Auto-detect format
                 format_detector = FormatDetector(self.settings)
                 detected_format = format_detector.detect_format(text)
+                
+                if detected_format is None:
+                    self.logger.error("No supported format detected for this PDF")
+                    raise ValueError("Unsupported lab report format. Please check if this is a supported lab report type.")
+                
                 self.logger.info(f"Auto-detected format: {detected_format.value}")
             
             # Create appropriate extractor

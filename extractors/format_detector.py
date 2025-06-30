@@ -14,6 +14,7 @@ class ReportFormat(Enum):
     LABCORP_STANDARD = "labcorp_standard"
     LABCORP_ANALYTE_VALUE = "labcorp_analyte_value"
     QUEST_ANALYTE_VALUE = "quest_analyte_value"
+    QUEST_TABULAR = "quest_tabular"
     CLEVELAND_HEARTLAB = "cleveland_heartlab"
     BOSTON_HEART = "boston_heart"
     ELATION_LABCORP = "elation_labcorp"
@@ -40,6 +41,7 @@ class FormatDetector:
         
         # Quest patterns
         self.quest_analyte_pattern = re.compile(r'Analyte\s*\n\s*Value', re.IGNORECASE)
+        self.quest_tabular_pattern = re.compile(r'Test Name.*?(?:In Range|Out Of Range|Reference Range)', re.IGNORECASE)
         
         # Cleveland HeartLab patterns
         self.cleveland_pattern = re.compile(r'cleveland heartlab', re.IGNORECASE)
@@ -86,7 +88,11 @@ class FormatDetector:
             self.logger.info("Detected LabCorp standard format")
             return ReportFormat.LABCORP_STANDARD
         
-        # Check for Quest Analyte/Value format
+        # Check for Quest formats (most specific first)
+        if self._is_quest_tabular(text):
+            self.logger.info("Detected Quest tabular format")
+            return ReportFormat.QUEST_TABULAR
+        
         if self._is_quest_analyte_value(text):
             self.logger.info("Detected Quest Analyte/Value format")
             return ReportFormat.QUEST_ANALYTE_VALUE
@@ -111,9 +117,9 @@ class FormatDetector:
             self.logger.info("Detected fragmented format")
             return ReportFormat.FRAGMENTED
         
-        # Default to standard format
-        self.logger.info("Using standard format (fallback)")
-        return ReportFormat.STANDARD
+        # No fallback - return None to indicate unsupported format
+        self.logger.warning("No supported format detected")
+        return None
     
     def _is_labcorp_nmr(self, text: str) -> bool:
         """Check if text matches LabCorp NMR LipoProfile format."""
@@ -154,6 +160,23 @@ class FormatDetector:
         is_vibrant = 'vibrant america' in text_lower
         
         return has_analyte_value and has_quest and not is_vibrant and self.quest_analyte_pattern.search(text)
+    
+    def _is_quest_tabular(self, text: str) -> bool:
+        """Check if text matches Quest tabular format."""
+        text_lower = text.lower()
+        
+        # Look for Quest-specific indicators
+        quest_indicators = ['quest diagnostics', 'questdiagnostics']
+        has_quest = any(indicator in text_lower for indicator in quest_indicators)
+        
+        # Look for tabular header pattern
+        has_tabular_header = bool(self.quest_tabular_pattern.search(text))
+        
+        # Look for typical Quest tabular data pattern (test name followed by value and flag)
+        tabular_data_pattern = re.compile(r'^\s*[A-Z][A-Z\s,\(\)/-]+?\s+[0-9<>]+\.?[0-9]*\s+[HL]?\s+[0-9\-<>]', re.MULTILINE)
+        has_tabular_data = bool(tabular_data_pattern.search(text))
+        
+        return has_quest and has_tabular_header and has_tabular_data
     
     def _is_cleveland_heartlab(self, text: str) -> bool:
         """Check if text matches Cleveland HeartLab format."""
@@ -230,11 +253,13 @@ class FormatDetector:
         has_function_dashboard = bool(self.function_health_pattern.search(text))
         has_function_url = bool(self.function_health_url_pattern.search(text))
         
-        # Look for status indicators
-        has_status_indicators = ('In Range' in text and 'Out of Range' in text)
+        # Look for status indicators (handle both normal and spaced text)
+        has_status_indicators = (('In Range' in text and 'Out of Range' in text) or 
+                               ('I n  R a n g e' in text and 'O u t  o f  R a n g e' in text))
         
-        # Look for biomarker count pattern
-        has_biomarker_pattern = bool(re.search(r'\d+Biomarkers', text))
+        # Look for biomarker count pattern (handle both normal and spaced text)
+        has_biomarker_pattern = (bool(re.search(r'\d+Biomarkers', text)) or
+                               bool(re.search(r'\d+\s*B\s*i\s*o\s*m\s*a\s*r\s*k\s*e\s*r\s*s', text)))
         
         # Must have Function Health identifiers
         return (has_function_dashboard or has_function_url) and (has_status_indicators or has_biomarker_pattern)
@@ -269,6 +294,11 @@ class FormatDetector:
                 "description": "Quest Diagnostics Analyte/Value format",
                 "key_indicators": ["Analyte", "Value", "Quest"],
                 "typical_pattern": "Analyte header followed by Value header, then marker-value pairs"
+            },
+            ReportFormat.QUEST_TABULAR: {
+                "description": "Quest Diagnostics tabular format with Test Name, Range, and Lab columns",
+                "key_indicators": ["Test Name", "In Range", "Out Of Range", "Reference Range", "Quest"],
+                "typical_pattern": "Test Name Value Flag Range Units Lab"
             },
             ReportFormat.CLEVELAND_HEARTLAB: {
                 "description": "Cleveland HeartLab fatty acid analysis",
