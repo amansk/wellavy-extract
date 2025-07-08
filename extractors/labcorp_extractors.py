@@ -63,6 +63,66 @@ class LabCorpNMRExtractor(BaseExtractor):
             # "LDL-P A, 01 1258 High 961 02/27/2025 nmol/L <1000"
             re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A,\s*01\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+.*$'),
             
+            # Pattern 11: Comprehensive LabCorp format with A marker
+            # "LDL-P A 1246 High nmol/L <1000 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[a-zA-Z/0-9%]+\s+[0-9\.\-<>=\s]+\s+01\s*$'),
+            
+            # Pattern 12: Comprehensive LabCorp format without A marker
+            # "HDL-C 40 mg/dL >39 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+([0-9]+\.?[0-9]*)\s+[a-zA-Z/0-9%]+\s+[0-9\.\-<>=\s]+\s+01\s*$'),
+            
+            # Pattern 13: Format with decimal values
+            # "HDL-P (Total) A 25.8 Low umol/L >=30.5 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A\s+([0-9]*\.?[0-9]+)\s*(?:High|Low)?\s+[a-zA-Z/0-9%]+\s+[0-9\.\-<>=\s]+\s+01\s*$'),
+            
+            # Pattern 14: Format with special characters in value
+            # "LP-IR Score A 55 High <=45 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A\s+([0-9]+\.?[0-9]*)\s*(?:High|Low)?\s+[<>=]+[0-9]+\s+01\s*$'),
+            
+            # Pattern 15: Format with just marker name and value ending with any lab code
+            # "Triglycerides A 160 High mg/dL 0-149 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+A\s+([0-9]+\.?[0-9]*)\s+.*0[1-4]\s*$'),
+            
+            # Pattern 16: Format without A marker, just value and any lab code
+            # "Large VLDL-P 4.7 High nmol/L <=2.7 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+([0-9]+\.?[0-9]*)\s+.*0[1-4]\s*$'),
+            
+            # Pattern 17: Format with colon or calc in name (no A marker)
+            # "LDL-C (NIH Calc) 103 High mg/dL 0-99 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+(?:Calc|Score|Total))\s+([0-9]+\.?[0-9]*)\s+.*0[1-4]\s*$'),
+            
+            # Pattern 18: Format with parentheses in name (no A marker)
+            # "LDL-C (NIH Calc) 103 High mg/dL 0-99 01"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+\([^)]+\))\s+([0-9]+\.?[0-9]*)\s+.*0[1-4]\s*$'),
+            
+            # Pattern 19: Format with missing units pattern
+            # "Vitamin D, 25-Hydroxy 63.0 ng/mL 30.0-100.0 02"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+([0-9]+\.?[0-9]*)\s+[a-zA-Z/0-9%]+\s+[0-9\.\-<>=\s]+\s+0[1-4]\s*$'),
+            
+            # Pattern 20: Format with special ranges
+            # "Measles Antibodies, IgG 14.1 Low AU/mL Immune >16.4 02"
+            re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/]+)\s+([0-9]+\.?[0-9]*)\s+(?:High|Low)?\s+[a-zA-Z/0-9%]+\s+.*0[1-4]\s*$'),
+            
+            # Pattern 21: Format with numbers in marker name
+            # "Vitamin D, 25-Hydroxy 63.0 ng/mL 30.0-100.0 02"
+            re.compile(r'^([A-Za-z][A-Za-z0-9\s\-,\(\)®™/]+)\s+([0-9]+\.?[0-9]*)\s+[a-zA-Z/0-9%]+\s+[0-9\.\-<>=\s]+\s+0[1-4]\s*$'),
+            
+            # Pattern 22: Format for A1c and similar
+            # "Hemoglobin A1c 5.5 % 4.8-5.6 02"
+            re.compile(r'^([A-Za-z][A-Za-z0-9\s\-,\(\)®™/]+c)\s+([0-9]+\.?[0-9]*)\s+.*0[1-4]\s*$'),
+            
+            # Pattern 24: Handle "Not Estab." ranges (specific first)
+            # "Neutrophils 35 % Not Estab. 02"
+            re.compile(r'^([A-Za-z][A-Za-z0-9\s\-,\(\)®™/\.]+?)\s+([0-9]+\.?[0-9]*)\s+%\s+Not\s+Estab\.\s+0[1-4]\s*$'),
+            
+            # Pattern 25: Handle values with "Low" flag without units showing
+            # "Dihydrotestosterone 11 Low ng/dL 03"
+            re.compile(r'^([A-Za-z][A-Za-z0-9\s\-,\(\)®™/\.]+?)\s+([0-9]+\.?[0-9]*)\s+Low\s+[a-zA-Z/0-9%]+\s+0[1-4]\s*$'),
+            
+            # Pattern 23: Very broad pattern for any remaining markers (LAST)
+            # Catches anything with letters, spaces, number, and lab code
+            re.compile(r'^([A-Za-z][A-Za-z0-9\s\-,\(\)®™/\.]+?)\s+([0-9]+\.?[0-9]*)\s+.*\s+0[1-4]\s*$'),
+            
             # Pattern 6: Special tests with other codes (A,03, B,01, etc.)
             # "p-tau217 A, 03 0.12 pg/mL 0.00-0.18"
             re.compile(r'^([A-Za-z][A-Za-z\s\-,\(\)®™/0-9]+)\s+[AB],\s*0[1-4]\s+([0-9]+\.?[0-9]*)\s+.*$'),
@@ -94,14 +154,17 @@ class LabCorpNMRExtractor(BaseExtractor):
             labcorp_indicators = [
                 'A, 01', 'A, 02', 'A, 03', 'A, 04',
                 'B, 01', 'B, 02', 'B, 03', 'B, 04',
-                ' 01 ', ' 02 ', ' 03 ', ' 04 '
+                ' 01 ', ' 02 ', ' 03 ', ' 04 ',
+                ' A ', ' B ',  # Add patterns for lines like "LDL-P A 1246..."
+                ' 01', ' 02', ' 03', ' 04'  # Also match lines ending with lab codes
             ]
             is_labcorp_line = (any(indicator in line for indicator in labcorp_indicators) or
                               (any(flag in line for flag in ['High', 'Low']) and 
                                any(date_pattern in line for date_pattern in ['/2024', '/2025'])))
+                
             if not is_labcorp_line and self.text_processor.is_header_line(line):
                 continue
-                
+            
             # Try each pattern
             for pattern in patterns:
                 match = pattern.match(line)
@@ -109,8 +172,9 @@ class LabCorpNMRExtractor(BaseExtractor):
                     marker_name = match.group(1).strip()
                     value = match.group(2).strip()
                     
-                    # Clean marker name - only remove trailing commas, keep parentheses
+                    # Clean marker name - only remove trailing commas, keep parentheses and A designations
                     marker_name = re.sub(r'[,]+$', '', marker_name).strip()
+                    # Don't remove 'A' from the end as it's an important LabCorp designation
                     
                     # Validate extraction
                     if self._is_valid_nmr_extraction(marker_name, value):
@@ -130,29 +194,17 @@ class LabCorpNMRExtractor(BaseExtractor):
         """Validate NMR extractions."""
         marker = marker.strip()
         
-        # Skip obvious non-markers (use word boundaries to avoid false matches)
+        # Very minimal validation - just skip obvious non-markers
         skip_patterns = [
-            r'\bpatient\b', r'\bphone\b', r'\bclient\b', r'\bdob\b', r'\btest\b(?!osterone)', 
-            r'\bpage\b', r'\bbranch\b', r'\bnejm\b', r'\bpdf\b', r'\bcomment\b', 
-            r'\blipids\b', r'\bborderline\b', r'\bguideline\b', r'\bfor inquiries\b', 
-            r'\bmarginal\b', r'\bprediabetes\b', r'\blow\b', r'\bhigh\b', r'\bmoderate\b',
-            r'\breduced risk\b', r'\bincreased risk\b', r'\bvery high\b', r'\bhigh risk\b', 
-            r'\bmoderate risk\b', r'\boptimal\b', r'\babove optimal\b', r'^serum$',
-            r'\binterpretative\b', r'\binformation\b', r'\bpercentile\b', r'\breference\b',
-            r'\bpopulation\b', r'\bpattern\b', r'\bcvd risk\b', r'\blower\b', r'\bhigher\b'
+            r'\bpatient\b', r'\bphone\b', r'\bclient\b', r'\bdob\b', r'\bpage\b', 
+            r'\bcomment\b', r'\bguideline\b', r'\bfor inquiries\b'
         ]
         
         if any(re.search(pattern, marker.lower()) for pattern in skip_patterns):
             return False
         
         # Skip very short markers
-        if len(marker) < 3:
-            return False
-        
-        # Skip lines that look like reference ranges or guidelines (but not marker names)
-        # Allow markers like "LDL-P" but reject things like "Reference Range:"
-        reference_words = ['percentile', 'reference range', 'reference interval']
-        if any(word in marker.lower() for word in reference_words):
+        if len(marker) < 2:
             return False
         
         # Validate value is reasonable
