@@ -47,7 +47,37 @@ class FunctionHealthExtractor(BaseExtractor):
                 i += 1
                 continue
             
-            # Check if next line matches a status pattern
+            # Check for concatenated biomarker lines (multiple NEW markers in one line)
+            concatenated_results = self._extract_concatenated_biomarkers(current_line, include_ranges)
+            if concatenated_results:
+                all_results.extend(concatenated_results)
+                i += 1
+                continue
+            
+            # Check for three-line NEW marker pattern:
+            # Line 1: Biomarker Name
+            # Line 2: "NEW"
+            # Line 3: Status + Value + Unit
+            if (next_line == "NEW" and i + 2 < len(lines)):
+                third_line = lines[i + 2].strip()
+                status_match = self._parse_status_line(third_line)
+                if status_match:
+                    marker_name = self._clean_marker_name(current_line)
+                    status, value, unit = status_match
+                    
+                    # Validate this looks like a real biomarker
+                    if self._is_valid_function_health_extraction(marker_name, value):
+                        if include_ranges:
+                            min_range, max_range = self._infer_range_from_status(status, value)
+                            all_results.append((marker_name, value, min_range, max_range))
+                        else:
+                            all_results.append((marker_name, value))
+                    
+                    # Skip the next two lines since we processed them
+                    i += 3
+                    continue
+            
+            # Check if next line matches a status pattern (standard two-line format)
             status_match = self._parse_status_line(next_line)
             if status_match:
                 marker_name = self._clean_marker_name(current_line)
@@ -98,6 +128,61 @@ class FunctionHealthExtractor(BaseExtractor):
         
         return any(re.search(pattern, line.lower()) for pattern in skip_patterns)
     
+    def _extract_concatenated_biomarkers(self, line: str, include_ranges: bool = False) -> List[Tuple]:
+        """Extract biomarkers from concatenated lines with multiple NEW markers."""
+        # Look for pattern: NEWBiomarkerNameInRangeValueUnit repeated multiple times
+        # Example: "NEWNEWNEWNEWNEWNEWNEWIron Binding CapacityIn Range312mcg/dL (calc)MagnesiumIn Range4.7mg/dLOmega 3 Total / OmegaCheckIn Range5.6% by wt"
+        
+        if 'NEW' not in line or 'In Range' not in line:
+            return []
+        
+        results = []
+        
+        # Split on "NEW" and process each segment
+        segments = line.split('NEW')
+        
+        for segment in segments:
+            if not segment.strip():
+                continue
+            
+            # Look for pattern: BiomarkerName + InRange/AboveRange/BelowRange + Value + Unit
+            # Try different patterns to capture biomarker name, status, and value
+            patterns = [
+                # Pattern 1: Name + In Range + numeric value + unit
+                r'^([A-Za-z][A-Za-z\s,\(\)\/-]+?)(In Range|Above Range|Below Range)([\d<>\.]+)\s*([a-zA-Z/%\(\)]+.*?)(?=[A-Z][a-z].*?(?:In Range|Above Range|Below Range)|$)',
+                
+                # Pattern 2: Name + In Range + numeric value (no unit)  
+                r'^([A-Za-z][A-Za-z\s,\(\)\/-]+?)(In Range|Above Range|Below Range)([\d<>\.]+)(?=[A-Z][a-z].*?(?:In Range|Above Range|Below Range)|$)',
+                
+                # Pattern 3: Name + In Range + value with spaces + unit
+                r'^([A-Za-z][A-Za-z\s,\(\)\/-]+?)(In Range|Above Range|Below Range)([\d<>\.\s]+)\s*([a-zA-Z/%\(\)]+.*?)(?=[A-Z][a-z].*?(?:In Range|Above Range|Below Range)|$)',
+            ]
+            
+            for pattern in patterns:
+                matches = re.finditer(pattern, segment)
+                for match in matches:
+                    marker_name = match.group(1).strip()
+                    status = match.group(2)
+                    value = match.group(3).strip()
+                    unit = match.group(4).strip() if len(match.groups()) > 3 else ""
+                    
+                    # Clean up the marker name
+                    marker_name = self._clean_marker_name(marker_name)
+                    
+                    # Clean up the value (remove extra spaces)
+                    value = re.sub(r'\s+', '', value)
+                    
+                    # Validate the extraction
+                    if self._is_valid_function_health_extraction(marker_name, value):
+                        if include_ranges:
+                            min_range, max_range = self._infer_range_from_status(status, value)
+                            results.append((marker_name, value, min_range, max_range))
+                        else:
+                            results.append((marker_name, value))
+                break  # Found a match, move to next segment
+        
+        return results
+    
     def _parse_status_line(self, line: str) -> Tuple[str, str, str]:
         """Parse status line to extract status, value, and unit."""
         # First try patterns for normal text
@@ -115,6 +200,11 @@ class FunctionHealthExtractor(BaseExtractor):
         match = re.match(r'^(In Range|Above Range|Below Range)\s+(<\d+\.?\d*)\s+(.+)$', line)
         if match:
             return match.group(1), match.group(2), match.group(3)
+        
+        # Pattern 3a: Numeric value without unit - "In Range 7.6"
+        match = re.match(r'^(In Range|Above Range|Below Range)\s+(\d+\.?\d*)$', line)
+        if match:
+            return match.group(1), match.group(2), ""
         
         # Pattern 4: Qualitative results - "In Range Negative"
         match = re.match(r'^(In Range|Above Range|Below Range)\s+(Negative|Positive|Normal|Abnormal)$', line)

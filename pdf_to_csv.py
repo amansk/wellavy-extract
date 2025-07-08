@@ -855,7 +855,7 @@ class BloodTestExtractor:
                 # Map user format to internal format
                 from extractors.format_detector import ReportFormat
                 format_mapping = {
-                    'quest': ReportFormat.QUEST_ANALYTE_VALUE,
+                    'quest': ReportFormat.QUEST_TABULAR,  # Default to tabular format
                     'labcorp': ReportFormat.LABCORP_NMR  # Default to NMR, will fall back if needed
                 }
                 detected_format = format_mapping.get(force_format.lower())

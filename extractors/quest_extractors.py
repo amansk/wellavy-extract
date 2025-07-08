@@ -216,6 +216,10 @@ class QuestAnalyteValueExtractor(BaseExtractor):
     
     def _is_valid_analyte_extraction(self, marker: str, value: str) -> bool:
         """Validate analyte extractions."""
+        # Check for None values
+        if marker is None or value is None:
+            return False
+            
         marker = marker.strip().upper()
         
         # Skip obvious non-markers and page numbers
@@ -267,6 +271,10 @@ class QuestTabularExtractor(BaseExtractor):
     
     def extract(self, text: str, include_ranges: bool = False) -> Tuple[List[Tuple], List[Tuple]]:
         """Extract from Quest tabular format."""
+        # Check if text is None
+        if text is None:
+            return [], []
+            
         all_results = []
         lines = text.split('\n')
         
@@ -286,62 +294,123 @@ class QuestTabularExtractor(BaseExtractor):
             
             # Pattern 5: Complex test names with numbers (IGF 1, LC/MS)
             re.compile(r'^\s*([A-Z%][A-Z\s,\(\)/\d-]+?)\s+([\d<>]+\.?\d*)\s+([HL])?\s*([\d\-<>\.]*)\s*(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 6: LIPOPROTEIN (a) pattern - handles parentheses in test name
+            re.compile(r'^\s*(LIPOPROTEIN \(a\))\s+([\d<>]+\.?\d*)\s+(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 7: HEMOGLOBIN A1c pattern - handles complex value format with comparison
+            re.compile(r'^\s*(HEMOGLOBIN A1c)\s+([\d<>]+\.?\d*)\s+[<>]?[\d\.]*\s*(.+?)(?:\s+[A-Z]{2})?$'),
+            
+            # Pattern 8: Short hormone patterns like "LH 4.0 1.5-9.3 mIU/mL UL"
+            re.compile(r'^\s*(LH|FSH|TSH)\s+([\d<>]+\.?\d*)\s+([\d\-<>\.]+)\s+(.+?)(?:\s+[A-Z]{2})?$'),
         ]
         
-        for line in lines:
+        for i, line in enumerate(lines):
             line = line.strip()
             
             # Skip header lines and empty lines
             if not line or any(header in line.upper() for header in ['TEST NAME', 'REFERENCE RANGE', 'IN RANGE', 'OUT OF RANGE', 'LAB']):
                 continue
                 
-            # Skip obvious non-test lines
-            if any(skip in line.upper() for skip in ['PATIENT', 'COLLECTED', 'REPORTED', 'PAGE', 'DOB', 'SEX']):
+            # Skip obvious non-test lines (but allow SEX HORMONE BINDING)
+            if any(skip in line.upper() for skip in ['PATIENT', 'COLLECTED', 'REPORTED', 'PAGE', 'DOB']) or ('SEX' in line.upper() and 'HORMONE BINDING' not in line.upper()):
                 continue
+                
+            # Skip Cleveland HeartLab sections (markers are repeated later)
+            if any(cleveland in line.upper() for cleveland in ['CLEVELAND HEARTLAB', 'CLEVELAND HEART LAB']):
+                continue
+                
+            # Skip reference range lines (lines that start with test name but have ONLY comparison operators as values)
+            # These are reference ranges, not actual test results - be more specific
+            # Only skip if the line looks like "TEST NAME <value" or "TEST NAME >value" with no other content
+            if re.match(r'^\s*[A-Z][A-Z\s,\(\)/-]+?\s+[<>]\d+\s*$', line):
+                continue
+            
+            # Handle multi-line markers (test name split across consecutive lines)
+            # Check for specific patterns: "THYROID PEROXIDASE EN" + "ANTIBODIES ..."
+            if line.upper() == 'THYROID PEROXIDASE EN' and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if next_line.startswith('ANTIBODIES'):
+                    # Extract value from the antibodies line  
+                    antibodies_match = re.match(r'ANTIBODIES\s*(\d+\.?\d*)', next_line)
+                    if antibodies_match:
+                        marker_name = 'THYROID PEROXIDASE ANTIBODIES'
+                        value = antibodies_match.group(1)
+                        if self._is_valid_tabular_extraction(marker_name, value):
+                            all_results.append((marker_name, value))
+                        continue
+            
+            # Check for "SEX HORMONE BINDING EN" + "GLOBULIN ..."
+            if line.upper().strip() == 'SEX HORMONE BINDING EN' and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if next_line.startswith('GLOBULIN'):
+                    # Extract value from the globulin line: "GLOBULIN 65 H 10-50 nmol/L"
+                    globulin_match = re.match(r'GLOBULIN\s*(\d+\.?\d*)', next_line)
+                    if globulin_match:
+                        marker_name = 'SEX HORMONE BINDING GLOBULIN'
+                        value = globulin_match.group(1)
+                        if self._is_valid_tabular_extraction(marker_name, value):
+                            all_results.append((marker_name, value))
+                        continue
+            
+            # Skip standalone "ANTIBODIES" or "GLOBULIN" lines that are part of multi-line markers
+            # Check if previous line was a multi-line marker prefix
+            if i > 0:
+                prev_line = lines[i - 1].strip().upper()
+                if ((prev_line == 'THYROID PEROXIDASE EN' and line.startswith('ANTIBODIES')) or
+                    (prev_line == 'SEX HORMONE BINDING EN' and line.startswith('GLOBULIN'))):
+                    continue  # Skip this line as it was already processed as part of multi-line marker
             
             # Try each pattern until one matches
             matched = False
             for pattern in patterns:
-                match = pattern.match(line)
-                if match:
-                    groups = match.groups()
-                    marker_name = groups[0].strip()
-                    
-                    # Handle different pattern structures
-                    if 'SEE NOTE:' in line:
-                        # Pattern 4: special note format
-                        value = None  # Will need to extract from note
-                        range_part = groups[1] if len(groups) > 1 else None
-                        continue  # Skip SEE NOTE entries for now
-                    elif len(groups) >= 3:
-                        value = groups[1].strip()
+                try:
+                    match = pattern.match(line)
+                    if match:
+                        groups = match.groups()
+                        marker_name = groups[0].strip()
                         
-                        # Determine if group 2 is flag or range
-                        flag = None
-                        range_part = None
-                        units_and_lab = None
-                        
-                        if len(groups) >= 4 and groups[2] in ['H', 'L']:
-                            # Has flag
-                            flag = groups[2]
-                            range_part = groups[3] if len(groups) > 3 and groups[3] else None
-                            units_and_lab = groups[4] if len(groups) > 4 else None
-                        elif len(groups) >= 3:
-                            # No flag, group 2 might be range or units
-                            if re.match(r'^[\d\-<>\.]+$', groups[2]):
-                                range_part = groups[2]
-                                units_and_lab = groups[3] if len(groups) > 3 else None
-                            else:
-                                units_and_lab = groups[2]
-                        
-                        if self._is_valid_tabular_extraction(marker_name, value):
-                            if include_ranges and range_part:
-                                min_range, max_range = self._parse_quest_range(range_part)
-                                all_results.append((marker_name, value, min_range, max_range))
-                            else:
-                                all_results.append((marker_name, value))
-                            matched = True
-                            break
+                        # Handle different pattern structures
+                        if 'SEE NOTE:' in line:
+                            # Pattern 4: special note format
+                            # Skip SEE NOTE entries as they don't have extractable values
+                            continue
+                        elif len(groups) >= 2:
+                            value = groups[1].strip() if groups[1] is not None else None
+                            
+                            # Check for None values
+                            if value is None:
+                                continue
+                            
+                            # Determine if group 2 is flag or range
+                            flag = None
+                            range_part = None
+                            units_and_lab = None
+                            
+                            if len(groups) >= 4 and groups[2] in ['H', 'L']:
+                                # Has flag
+                                flag = groups[2]
+                                range_part = groups[3] if len(groups) > 3 and groups[3] else None
+                                units_and_lab = groups[4] if len(groups) > 4 else None
+                            elif len(groups) >= 3:
+                                # No flag, group 2 might be range or units
+                                if groups[2] and re.match(r'^[\d\-<>\.]+$', groups[2]):
+                                    range_part = groups[2]
+                                    units_and_lab = groups[3] if len(groups) > 3 else None
+                                else:
+                                    units_and_lab = groups[2]
+                            
+                            if self._is_valid_tabular_extraction(marker_name, value):
+                                if include_ranges and range_part:
+                                    min_range, max_range = self._parse_quest_range(range_part)
+                                    all_results.append((marker_name, value, min_range, max_range))
+                                else:
+                                    all_results.append((marker_name, value))
+                                matched = True
+                                break
+                except Exception as e:
+                    # Skip lines that cause parsing errors
+                    continue
             
             # Debug: log unmatched lines (remove in production)
             if not matched and len(line) > 10 and not any(skip in line.upper() for skip in ['PATIENT', 'COLLECTED', 'REPORTED', 'PAGE', 'DOB']):
@@ -382,6 +451,10 @@ class QuestTabularExtractor(BaseExtractor):
     
     def _is_valid_tabular_extraction(self, marker: str, value: str) -> bool:
         """Validate tabular extractions."""
+        # Check for None values
+        if marker is None or value is None:
+            return False
+            
         marker = marker.strip().upper()
         
         # Skip obvious non-markers
@@ -391,8 +464,8 @@ class QuestTabularExtractor(BaseExtractor):
                                           'FAX', 'SPECIMEN', 'COLLECTED', 'RECEIVED']):
             return False
         
-        # Skip very short markers
-        if len(marker) < 3:
+        # Skip very short markers (but allow common hormones)
+        if len(marker) < 3 and marker not in ['LH', 'T3', 'T4']:
             return False
         
         # Validate value is reasonable
