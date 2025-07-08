@@ -70,16 +70,7 @@ class FormatDetector:
         """
         text_lower = text.lower()
         
-        # Check for Elation formats first (more specific)
-        if self._is_elation_labcorp(text):
-            self.logger.info("Detected Elation LabCorp format")
-            return ReportFormat.ELATION_LABCORP
-        
-        if self._is_elation_quest(text):
-            self.logger.info("Detected Elation Quest format")
-            return ReportFormat.ELATION_QUEST
-        
-        # Check for LabCorp formats (most specific to least specific)
+        # Check for LabCorp formats FIRST (prioritize over Elation)
         if self._is_labcorp_nmr(text):
             self.logger.info("Detected LabCorp NMR LipoProfile format")
             return ReportFormat.LABCORP_NMR
@@ -123,16 +114,23 @@ class FormatDetector:
     
     def _is_labcorp_nmr(self, text: str) -> bool:
         """Check if text matches LabCorp NMR LipoProfile format."""
-        # Look for specific NMR markers with LabCorp format
-        nmr_indicators = [
-            'LDL-P A, 01',
-            'HDL-P (Total) A, 01', 
-            'Small LDL-P A, 01',
-            'LDL Size A, 01',
-            'NMR LipoProfile'
+        # Look for comprehensive LabCorp indicators (covers both NMR and standard)
+        labcorp_indicators = [
+            'NMR LipoProfile',  # Classic NMR indicator
+            'LDL-P A ',         # NMR particle markers (no comma, space after A)
+            'HDL-P (Total) A ',
+            'Small LDL-P A ',
+            'LDL Size A ',
+            'LP-IR Score A ',   # Insulin resistance score
+            # Standard LabCorp patterns with lab codes
+            ' A 01',            # Lines ending with "A 01" 
+            ' 01\n',            # Lines ending with lab code 01
+            ' 02\n',            # Lines ending with lab code 02
+            'mg/dL.*01',        # LabCorp units with lab code
+            'nmol/L.*01',       # NMR-specific units
         ]
         
-        return any(indicator in text for indicator in nmr_indicators)
+        return any(indicator in text for indicator in labcorp_indicators)
     
     def _is_labcorp_standard(self, text: str) -> bool:
         """Check if text matches LabCorp standard format."""
