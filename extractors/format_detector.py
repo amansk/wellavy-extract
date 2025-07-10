@@ -259,8 +259,15 @@ class FormatDetector:
         has_biomarker_pattern = (bool(re.search(r'\d+Biomarkers', text)) or
                                bool(re.search(r'\d+\s*B\s*i\s*o\s*m\s*a\s*r\s*k\s*e\s*r\s*s', text)))
         
-        # Must have Function Health identifiers
-        return (has_function_dashboard or has_function_url) and (has_status_indicators or has_biomarker_pattern)
+        # NEW: Look for characteristic "Your Health" header with filter stats
+        has_health_header = 'Your Health' in text and 'Filter' in text
+        
+        # NEW: Look for characteristic status + value pattern (e.g., "In Range 16.5 g/dL")
+        has_status_value_pattern = bool(re.search(r'(?:In Range|Out of Range|Improving)\s+[\d<>]+', text))
+        
+        # Must have Function Health identifiers OR the characteristic patterns
+        return ((has_function_dashboard or has_function_url) and (has_status_indicators or has_biomarker_pattern)) or \
+               (has_health_header and has_status_indicators and has_biomarker_pattern and has_status_value_pattern)
     
     def _is_fragmented(self, text: str) -> bool:
         """Check if text appears to be fragmented."""

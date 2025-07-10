@@ -802,11 +802,15 @@ class BloodTestExtractor:
             # For combination reports, we need both Cleveland and comprehensive data
             has_cleveland = 'cleveland heartlab' in text.lower()
             
-            if len(lines) > 50 and (not has_cleveland or has_lab_markers):  # Restored threshold
+            # Check for spaced text extraction (common with Function Health PDFs)
+            has_spaced_text = bool(re.search(r'[A-Z]\s+[a-z]\s+[a-z]', text))  # e.g., "H e m o g l o b i n"
+            
+            if len(lines) > 50 and (not has_cleveland or has_lab_markers) and not has_spaced_text:  # Restored threshold
                 self.logger.info(f"Successfully extracted text from PDF using PyPDF2: {pdf_path}")
                 return text
             else:
-                self.logger.warning(f"PyPDF2 extraction yielded limited content ({len(lines)} lines), trying pdfplumber fallback")
+                reason = "spaced text detected" if has_spaced_text else f"limited content ({len(lines)} lines)"
+                self.logger.warning(f"PyPDF2 extraction issue: {reason}, trying pdfplumber fallback")
                 
         except Exception as e:
             self.logger.warning(f"PyPDF2 extraction failed: {str(e)}, trying pdfplumber fallback")
@@ -856,7 +860,8 @@ class BloodTestExtractor:
                 from extractors.format_detector import ReportFormat
                 format_mapping = {
                     'quest': ReportFormat.QUEST_TABULAR,  # Default to tabular format
-                    'labcorp': ReportFormat.LABCORP_NMR  # Default to NMR, will fall back if needed
+                    'labcorp': ReportFormat.LABCORP_NMR,  # Default to NMR, will fall back if needed
+                    'function_health': ReportFormat.FUNCTION_HEALTH
                 }
                 detected_format = format_mapping.get(force_format.lower())
                 self.logger.info(f"Using forced format: {detected_format.value}")
@@ -984,7 +989,7 @@ def save_csv_to_file(csv_content: str, output_path: Path) -> None:
 @click.option('--output', '-o', help='Output CSV file path (default: same name as PDF with .csv extension)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--include-ranges', '-r', is_flag=True, help='Include reference ranges (MinRange, MaxRange) in output')
-@click.option('--format', type=click.Choice(['quest', 'labcorp'], case_sensitive=False), help='Force specific lab format (auto-detects if not specified)')
+@click.option('--format', type=click.Choice(['quest', 'labcorp', 'function_health'], case_sensitive=False), help='Force specific lab format (auto-detects if not specified)')
 @click.option('--config-dir', default='config', help='Configuration directory path')
 def main(pdf_file: str, output: Optional[str], verbose: bool, include_ranges: bool, format: Optional[str], config_dir: str):
     """

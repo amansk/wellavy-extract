@@ -6,9 +6,9 @@ A robust CLI tool to extract blood test information from lab report PDFs and out
 
 ## Features
 
-- **Multi-format Support**: Handles Quest Diagnostics (Analyte/Value), LabCorp, and Vibrant America formats
+- **Multi-format Support**: Handles Quest Diagnostics (Analyte/Value), LabCorp, Function Health Dashboard, and Vibrant America formats
 - **Intelligent Format Detection**: Automatically detects and uses the appropriate extraction method
-- **Optional Format Override**: Force specific lab format (`--format=quest` or `--format=labcorp`) when needed
+- **Optional Format Override**: Force specific lab format (`--format=quest`, `--format=labcorp`, or `--format=function_health`) when needed
 - **Reference Range Extraction**: Optional extraction of reference ranges with `--include-ranges` flag
 - **Comprehensive Extraction**: Extracts 80+ markers including CBC, CMP, hormones, lipids, and fatty acids
 - **Single CSV Output**: All markers in one file, preserving the original PDF order
@@ -68,13 +68,14 @@ python3 pdf_to_csv.py your_lab_report.pdf -r
 ```bash
 python3 pdf_to_csv.py your_lab_report.pdf --format quest
 python3 pdf_to_csv.py your_lab_report.pdf --format labcorp
+python3 pdf_to_csv.py your_lab_report.pdf --format function_health
 ```
 
 ### Command Line Options
 - `--output, -o`: Specify the output CSV file path
 - `--verbose, -v`: Enable verbose output to see extracted data
 - `--include-ranges, -r`: Include reference ranges (MinRange, MaxRange) in output
-- `--format`: Force specific lab format (`quest` or `labcorp`) - auto-detects if not specified
+- `--format`: Force specific lab format (`quest`, `labcorp`, or `function_health`) - auto-detects if not specified
 - `--config-dir`: Specify custom configuration directory (default: config)
 - `--help`: Show help message
 
@@ -97,6 +98,13 @@ python3 pdf_to_csv.py your_lab_report.pdf --format labcorp
 - **Detection**: Cleveland HeartLab headers with fatty acid data
 - **Examples**: Cardiometabolic reports
 - **Extraction**: Omega-3, Omega-6, EPA, DHA, ratios
+
+### Function Health Dashboard
+- **Format**: Function Health's comprehensive biomarker dashboard export
+- **Detection**: Looks for "In Range", "Out of Range", "Biomarkers" patterns and characteristic layout
+- **Examples**: Function Health dashboard PDF exports
+- **Extraction**: 80-110+ markers including autoimmunity, biological age, hormones, vitamins, minerals
+- **Note**: PDFs may have spaced text extraction issues with PyPDF2; the tool automatically uses pdfplumber for better results
 
 ## Extracted Markers
 
@@ -182,7 +190,7 @@ python api.py
 
 Query Parameters:
 - `include_ranges` (boolean, optional): Include reference ranges in output (default: false)
-- `format` (string, optional): Force specific lab format (`quest` or `labcorp`) - auto-detects if not specified
+- `format` (string, optional): Force specific lab format (`quest`, `labcorp`, or `function_health`) - auto-detects if not specified
 
 **Example API Calls:**
 
