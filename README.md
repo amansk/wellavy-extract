@@ -211,6 +211,95 @@ curl -X POST "http://localhost:8000/convert?include_ranges=true&format=quest" \
   -F "file=@your_lab_report.pdf"
 ```
 
+## AI-Powered Extraction (Unified AI Extractor)
+
+The project includes an AI-powered extractor that uses Claude or GPT-4o to extract blood test results directly from PDFs without relying on text extraction patterns.
+
+### Features
+- **Direct PDF Processing**: Sends PDF as base64 to AI models for native OCR/document processing
+- **Dual AI Support**: Choose between Claude (Anthropic) or GPT-4o (OpenAI)
+- **Structured Output**: Returns JSON with standardized marker names and reference ranges
+- **Flexible Output**: Export as CSV or JSON format
+
+### Setup
+1. Create a `.env.local` file (see `.env.local.example`):
+```bash
+ANTHROPIC_API_KEY=your-claude-api-key
+OPENAI_API_KEY=your-openai-api-key
+```
+
+2. Install additional dependencies:
+```bash
+pip install anthropic openai python-dotenv
+```
+
+### Usage
+
+**Basic usage with Claude (default):**
+```bash
+python unified_ai_extractor.py your_lab_report.pdf
+```
+
+**Use GPT-4o instead:**
+```bash
+python unified_ai_extractor.py your_lab_report.pdf --service gpt4o
+```
+
+**Include reference ranges:**
+```bash
+python unified_ai_extractor.py your_lab_report.pdf --include-ranges
+```
+
+**Output as JSON:**
+```bash
+python unified_ai_extractor.py your_lab_report.pdf --json --output results.json
+```
+
+**Using the shell script:**
+```bash
+./run_unified_extractor.sh your_lab_report.pdf -s gpt4o -r
+```
+
+### AI Extractor Options
+- `--service/-s`: Choose AI service (`claude`, `openai`, or `gpt4o`)
+- `--output/-o`: Specify output file path
+- `--include-ranges/-r`: Include reference ranges in output
+- `--json`: Output as JSON instead of CSV
+
+### Output Format
+
+**JSON output structure:**
+```json
+{
+  "results": [
+    {
+      "marker": "Glucose",
+      "value": "95",
+      "min_range": "70",
+      "max_range": "100"
+    },
+    {
+      "marker": "Cholesterol",
+      "value": "180",
+      "min_range": null,
+      "max_range": "200"
+    }
+  ],
+  "test_date": "2024-01-15"
+}
+```
+
+### AI Models Used
+- **Claude**: `claude-sonnet-4-20250514` (Anthropic's latest Sonnet model)
+- **GPT-4o**: `gpt-4o` (OpenAI's multimodal model with vision capabilities)
+
+### When to Use AI Extraction
+The AI extractor is particularly useful for:
+- PDFs with complex layouts that pattern-based extraction struggles with
+- Scanned documents or images where OCR is needed
+- Reports from labs not yet supported by pattern-based extractors
+- Quick extraction without needing to configure patterns
+
 ## Real Examples
 
 ### Quest Diagnostics Report (2025 April Wild Health)
