@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Header
 from typing import Optional
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +7,8 @@ from pathlib import Path
 from pdf_to_csv import BloodTestExtractor, generate_csv_content
 import os
 import logging
+import json
+from unified_ai_extractor import UnifiedAIExtractor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +33,86 @@ app.add_middleware(
 async def root():
     """Health check endpoint"""
     return {"status": "healthy", "message": "PDF to CSV Converter API is running"}
+
+@app.post("/api/v1/ai-extract")
+async def ai_extract(
+    file: UploadFile = File(...),
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    include_ranges: bool = Query(False, description="Include reference ranges in output")
+):
+    """
+    Extract blood test results using AI (Claude).
+    Requires API key authentication via X-API-Key header.
+    
+    Args:
+        file: The PDF file to extract
+        x_api_key: API key for authentication
+        include_ranges: Whether to include reference ranges in the output
+        
+    Returns:
+        JSON with extracted blood test results
+    """
+    # Check API key
+    api_secret_key = os.getenv("API_SECRET_KEY")
+    if not api_secret_key:
+        logger.error("API_SECRET_KEY not configured in environment")
+        raise HTTPException(status_code=500, detail="Server configuration error")
+    
+    if x_api_key != api_secret_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Validate file type
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    
+    try:
+        # Create a temporary file to store the uploaded PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+            content = await file.read()
+            temp_pdf.write(content)
+            temp_pdf_path = temp_pdf.name
+        
+        try:
+            # Initialize the AI extractor with Claude as default
+            extractor = UnifiedAIExtractor(service="claude")
+            
+            # Extract data
+            results = extractor.extract(temp_pdf_path)
+            
+            # Check if we got results
+            if not results.get("results"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No valid data could be extracted from the PDF"
+                )
+            
+            # Filter results based on include_ranges parameter
+            if not include_ranges:
+                # Remove reference ranges from results if not requested
+                for result in results["results"]:
+                    result.pop("min_range", None)
+                    result.pop("max_range", None)
+            
+            # Return JSON response
+            return {
+                "success": True,
+                "test_date": results.get("test_date"),
+                "marker_count": len(results.get("results", [])),
+                "results": results.get("results", [])
+            }
+        
+        finally:
+            # Clean up the temporary file
+            Path(temp_pdf_path).unlink(missing_ok=True)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing PDF with AI: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing PDF: {str(e)}"
+        )
 
 @app.post("/convert")
 async def convert_pdf_to_csv(
