@@ -177,39 +177,152 @@ pdf-to-csv your_lab_report.pdf
 
 ## API Usage
 
-The tool includes a FastAPI web service for programmatic access:
+The tool includes a FastAPI web service with two extraction methods:
+
+1. **Pattern-based extraction** (public, no auth required)
+2. **AI-powered extraction** (secured with API key)
+
+### Starting the API Server
 
 ```bash
-# Start the API server
+# Start locally
 python api.py
+
+# Or deploy on Railway (automatic from GitHub)
 ```
 
 ### API Endpoints
 
-**POST** `/convert` - Convert PDF to CSV
+#### 1. Pattern-Based Extraction (Public)
+
+**POST** `/convert` - Extract using regex patterns
 
 Query Parameters:
 - `include_ranges` (boolean, optional): Include reference ranges in output (default: false)
 - `format` (string, optional): Force specific lab format (`quest`, `labcorp`, or `function_health`) - auto-detects if not specified
 
-**Example API Calls:**
-
+**Example:**
 ```bash
-# Basic conversion
-curl -X POST "http://localhost:8000/convert" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@your_lab_report.pdf"
+curl -X POST "http://localhost:8000/convert?include_ranges=true" \
+  -F "file=@your_lab_report.pdf" \
+  -o results.csv
+```
+
+#### 2. AI-Powered Extraction (Secured)
+
+**POST** `/api/v1/ai-extract` - Extract using Claude AI
+
+**Authentication Required:** Include API key in header
+```
+X-API-Key: your-api-key-here
+```
+
+Query Parameters:
+- `include_ranges` (boolean, optional): Include reference ranges in output (default: false)
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "test_date": "2024-01-15",
+  "marker_count": 85,
+  "results": [
+    {
+      "marker": "Glucose",
+      "value": "95",
+      "min_range": "70",    // Only if include_ranges=true
+      "max_range": "100"     // Only if include_ranges=true
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+# Basic extraction
+curl -X POST "https://bloodpdftocsv.amandeep.app/api/v1/ai-extract" \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@blood_test.pdf"
 
 # With reference ranges
-curl -X POST "http://localhost:8000/convert?include_ranges=true" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@your_lab_report.pdf"
-
-# Force specific format with ranges
-curl -X POST "http://localhost:8000/convert?include_ranges=true&format=quest" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@your_lab_report.pdf"
+curl -X POST "https://bloodpdftocsv.amandeep.app/api/v1/ai-extract?include_ranges=true" \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@blood_test.pdf"
 ```
+
+### Deployment on Railway
+
+1. **Fork/Clone this repository**
+2. **Connect to Railway:**
+   - Create new project on Railway
+   - Connect your GitHub repository
+3. **Set Environment Variables:**
+   ```
+   API_SECRET_KEY=your-secure-random-key
+   ANTHROPIC_API_KEY=sk-ant-your-claude-key
+   ```
+4. **Deploy:** Railway will auto-deploy on push
+
+### API Security
+
+The AI extraction endpoint requires authentication to:
+- Protect against unauthorized usage
+- Control Claude API costs
+- Track usage per client
+
+Generate a secure API key:
+```python
+import secrets
+print(secrets.token_urlsafe(32))
+```
+
+### Python Client Example
+
+```python
+import requests
+
+class BloodTestClient:
+    def __init__(self, api_url, api_key=None):
+        self.api_url = api_url
+        self.api_key = api_key
+    
+    def extract_with_ai(self, pdf_path, include_ranges=False):
+        """Use AI extraction (requires API key)"""
+        url = f"{self.api_url}/api/v1/ai-extract"
+        headers = {"X-API-Key": self.api_key}
+        params = {"include_ranges": include_ranges}
+        
+        with open(pdf_path, 'rb') as f:
+            files = {'file': f}
+            response = requests.post(url, headers=headers, files=files, params=params)
+        
+        return response.json()
+    
+    def extract_with_patterns(self, pdf_path, include_ranges=False):
+        """Use pattern extraction (no auth required)"""
+        url = f"{self.api_url}/convert"
+        params = {"include_ranges": include_ranges}
+        
+        with open(pdf_path, 'rb') as f:
+            files = {'file': f}
+            response = requests.post(url, files=files, params=params)
+        
+        return response.text  # CSV content
+
+# Usage
+client = BloodTestClient(
+    api_url="https://bloodpdftocsv.amandeep.app",
+    api_key="your-api-key"
+)
+
+# AI extraction
+results = client.extract_with_ai("blood_test.pdf", include_ranges=True)
+print(f"Found {results['marker_count']} markers")
+```
+
+### API Documentation
+
+For comprehensive API documentation including rate limiting, error handling, and more examples, see [API_DOCUMENTATION.md](API_DOCUMENTATION.md).
 
 ## AI-Powered Extraction (Unified AI Extractor)
 
