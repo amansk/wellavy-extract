@@ -85,21 +85,19 @@ Available database markers for mapping:
 {marker_list}
 
 INSTRUCTIONS:
-1. Extract ALL test results from the PDF (maximum 200 results)
+1. Extract ALL test results from the PDF
 2. For each result, try to match it to a database marker above
-3. If no match found, still include it with null mapping
-4. Return ONLY valid JSON, no markdown, no explanations
-5. IMPORTANT: Ensure proper JSON syntax with commas between all array elements
+3. If matched: use the database marker name and ID
+4. If NOT matched: use the PDF marker name in Title Case (e.g., "Vitamin D Total") and set ID to null
+5. Return ONLY valid JSON, no markdown, no explanations
 
 For each test result, provide:
 {{
-    "original_marker": "exact name from PDF",
-    "value": "numeric value", 
+    "marker": "database name if matched, otherwise PDF name in Title Case",
+    "marker_id": "database ID if matched, otherwise null",
+    "value": "numeric value",
     "min_range": "min reference or null",
-    "max_range": "max reference or null",
-    "mapped_marker_name": "matching database name or null if no match",
-    "mapped_marker_id": "matching database ID or null if no match",
-    "confidence": 0.0-1.0 (confidence in the mapping, 0 if no match)
+    "max_range": "max reference or null"
 }}
 
 Return this exact JSON structure:
@@ -108,6 +106,10 @@ Return this exact JSON structure:
     "test_date": "YYYY-MM-DD or null",
     "results": [array of ALL test results]
 }}
+
+Example results:
+- Matched: {{"marker": "Glucose", "marker_id": "be9a1341-7ce3-4e18-b3d8-4147d5bb6366", "value": "95", ...}}
+- Unmatched: {{"marker": "Vitamin D Total", "marker_id": null, "value": "32", ...}}
 
 CRITICAL: Return ONLY the JSON object. No text before or after."""
         
