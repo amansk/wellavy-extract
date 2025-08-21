@@ -75,38 +75,37 @@ class WellavyAIExtractor:
         
         # If we have database markers, create mapping prompt
         if self.database_markers:
-            # Limit to prevent overwhelming the model
-            markers_to_use = self.database_markers[:50] if len(self.database_markers) > 50 else self.database_markers
+            # Use all database markers for comprehensive mapping
             marker_list = "\n".join([f"- {m['name']} (ID: {m['id']})" 
-                                    for m in markers_to_use])
+                                    for m in self.database_markers])
             
-            return f"""Extract blood test results from the PDF. Return ONLY valid JSON with no extra text.
+            return f"""Extract ALL blood test results from the PDF. Map to database markers where possible.
 
-Database markers for mapping (extract ONLY these if found):
+Available database markers for mapping:
 {marker_list}
 
-IMPORTANT INSTRUCTIONS:
-1. Extract ONLY markers that match the database list above
-2. Ignore all other markers in the PDF
-3. Return ONLY valid JSON, no markdown, no explanations
-4. Maximum 100 results even if more markers match
+INSTRUCTIONS:
+1. Extract EVERY test result from the PDF
+2. For each result, try to match it to a database marker above
+3. If no match found, still include it with null mapping
+4. Return ONLY valid JSON, no markdown, no explanations
 
-For each matched marker, provide:
+For each test result, provide:
 {{
     "original_marker": "exact name from PDF",
-    "value": "numeric value",
-    "min_range": null,
-    "max_range": null,
-    "mapped_marker_name": "matching database name",
-    "mapped_marker_id": "matching database ID",
-    "confidence": 0.9
+    "value": "numeric value", 
+    "min_range": "min reference or null",
+    "max_range": "max reference or null",
+    "mapped_marker_name": "matching database name or null if no match",
+    "mapped_marker_id": "matching database ID or null if no match",
+    "confidence": 0.0-1.0 (confidence in the mapping, 0 if no match)
 }}
 
 Return this exact JSON structure:
 {{
     "success": true,
     "test_date": "YYYY-MM-DD or null",
-    "results": []
+    "results": [array of ALL test results]
 }}
 
 CRITICAL: Return ONLY the JSON object. No text before or after."""
