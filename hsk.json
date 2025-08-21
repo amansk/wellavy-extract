@@ -1,0 +1,359 @@
+{
+  "results": [
+    {
+      "marker": "Hemoglobin",
+      "value": "15.5",
+      "min_range": "13.0",
+      "max_range": "17.0"
+    },
+    {
+      "marker": "RBC",
+      "value": "5.08",
+      "min_range": "4.5",
+      "max_range": "5.5"
+    },
+    {
+      "marker": "HCT",
+      "value": "46.0",
+      "min_range": "40",
+      "max_range": "50"
+    },
+    {
+      "marker": "RDW-CV",
+      "value": "15.3",
+      "min_range": "11.6",
+      "max_range": "14"
+    },
+    {
+      "marker": "Total Leucocyte Count",
+      "value": "7.72",
+      "min_range": "4",
+      "max_range": "10"
+    },
+    {
+      "marker": "Neutrophils",
+      "value": "71.3",
+      "min_range": "40",
+      "max_range": "80"
+    },
+    {
+      "marker": "Lymphocytes",
+      "value": "17.2",
+      "min_range": "20",
+      "max_range": "40"
+    },
+    {
+      "marker": "Monocytes",
+      "value": "9.6",
+      "min_range": "2",
+      "max_range": "10"
+    },
+    {
+      "marker": "Eosinophils",
+      "value": "1.5",
+      "min_range": "1",
+      "max_range": "6"
+    },
+    {
+      "marker": "Basophils",
+      "value": "0.4",
+      "min_range": "0",
+      "max_range": "2"
+    },
+    {
+      "marker": "Platelet Count",
+      "value": "210",
+      "min_range": "150",
+      "max_range": "410"
+    },
+    {
+      "marker": "PDW",
+      "value": "17.8",
+      "min_range": "9",
+      "max_range": "17"
+    },
+    {
+      "marker": "Erythrocyte Sedimentation Rate",
+      "value": "16",
+      "min_range": "0",
+      "max_range": "30"
+    },
+    {
+      "marker": "C-Reactive Protein (Quantitative)",
+      "value": "2.60",
+      "min_range": "0",
+      "max_range": "3.3"
+    },
+    {
+      "marker": "Iron Serum",
+      "value": "81",
+      "min_range": "65",
+      "max_range": "175"
+    },
+    {
+      "marker": "Total Iron Binding Capacity (TIBC)",
+      "value": "245",
+      "min_range": "240",
+      "max_range": "540"
+    },
+    {
+      "marker": "Ferritin",
+      "value": "46.70",
+      "min_range": "22",
+      "max_range": "322"
+    },
+    {
+      "marker": "Glycosylated Hemoglobin (HbA1c)",
+      "value": "5.5",
+      "min_range": "4",
+      "max_range": "5.6"
+    },
+    {
+      "marker": "Glucose - Fasting",
+      "value": "89",
+      "min_range": "70",
+      "max_range": "99"
+    },
+    {
+      "marker": "Microalbumin-Albumin",
+      "value": "12.00",
+      "min_range": "0",
+      "max_range": "29.99"
+    },
+    {
+      "marker": "Microalbumin-Albumin/Creatinine Ratio",
+      "value": "18.78",
+      "min_range": "0",
+      "max_range": "29.99"
+    },
+    {
+      "marker": "Creatinine",
+      "value": "1.07",
+      "min_range": "0.7",
+      "max_range": "1.3"
+    },
+    {
+      "marker": "Uric Acid",
+      "value": "4.1",
+      "min_range": "3.5",
+      "max_range": "7.2"
+    },
+    {
+      "marker": "Sodium",
+      "value": "142",
+      "min_range": "136",
+      "max_range": "145"
+    },
+    {
+      "marker": "Potassium",
+      "value": "3.56",
+      "min_range": "3.5",
+      "max_range": "5.1"
+    },
+    {
+      "marker": "Cholesterol - Total",
+      "value": "136",
+      "min_range": null,
+      "max_range": "199.9"
+    },
+    {
+      "marker": "Triglycerides",
+      "value": "73",
+      "min_range": null,
+      "max_range": "149.9"
+    },
+    {
+      "marker": "Cholesterol - HDL",
+      "value": "63",
+      "min_range": "39.9",
+      "max_range": null
+    },
+    {
+      "marker": "Cholesterol - LDL",
+      "value": "59",
+      "min_range": "0",
+      "max_range": "99.9"
+    },
+    {
+      "marker": "Cholesterol : HDL Cholesterol",
+      "value": "2.2",
+      "min_range": "3.5",
+      "max_range": "4.5"
+    },
+    {
+      "marker": "LDL : HDL Cholesterol",
+      "value": "0.94",
+      "min_range": "2.5",
+      "max_range": "3"
+    },
+    {
+      "marker": "Non HDL Cholesterol",
+      "value": "73",
+      "min_range": "0",
+      "max_range": "129.9"
+    },
+    {
+      "marker": "Lipoprotein (a)",
+      "value": "58.88",
+      "min_range": "0",
+      "max_range": "29"
+    },
+    {
+      "marker": "Homocysteine",
+      "value": "21.99",
+      "min_range": "3.7",
+      "max_range": "13.9"
+    },
+    {
+      "marker": "High sensitivity CRP",
+      "value": "2.14",
+      "min_range": null,
+      "max_range": "3"
+    },
+    {
+      "marker": "Apolipoprotein - A1",
+      "value": "135.00",
+      "min_range": "79",
+      "max_range": "169"
+    },
+    {
+      "marker": "Apolipoprotein - B",
+      "value": "55.00",
+      "min_range": "46",
+      "max_range": "174"
+    },
+    {
+      "marker": "Apolipoprotein B/A1 Ratio",
+      "value": "0.41",
+      "min_range": null,
+      "max_range": null
+    },
+    {
+      "marker": "Bilirubin - Total",
+      "value": "0.82",
+      "min_range": "0.2",
+      "max_range": "1.1"
+    },
+    {
+      "marker": "Protein, Total",
+      "value": "6.70",
+      "min_range": "5.7",
+      "max_range": "8.2"
+    },
+    {
+      "marker": "Albumin",
+      "value": "4.40",
+      "min_range": "3.2",
+      "max_range": "4.8"
+    },
+    {
+      "marker": "Aspartate Transaminase (SGOT)",
+      "value": "22",
+      "min_range": null,
+      "max_range": "34"
+    },
+    {
+      "marker": "Alanine Transaminase (SGPT)",
+      "value": "7",
+      "min_range": "10",
+      "max_range": "49"
+    },
+    {
+      "marker": "Alkaline Phosphatase",
+      "value": "66",
+      "min_range": "46",
+      "max_range": "116"
+    },
+    {
+      "marker": "Gamma Glutamyltransferase (GGT)",
+      "value": "24",
+      "min_range": null,
+      "max_range": "72"
+    },
+    {
+      "marker": "Amylase",
+      "value": "110",
+      "min_range": "30",
+      "max_range": "118"
+    },
+    {
+      "marker": "Lipase",
+      "value": "37.0",
+      "min_range": "12",
+      "max_range": "53"
+    },
+    {
+      "marker": "Calcium",
+      "value": "9.0",
+      "min_range": "8.3",
+      "max_range": "10.6"
+    },
+    {
+      "marker": "Vitamin D (25-OH)",
+      "value": "55.3",
+      "min_range": "20",
+      "max_range": "100"
+    },
+    {
+      "marker": "Vitamin B12",
+      "value": "1155.0",
+      "min_range": "211",
+      "max_range": "911"
+    },
+    {
+      "marker": "Vitamin B9",
+      "value": "12.96",
+      "min_range": "5.39",
+      "max_range": null
+    },
+    {
+      "marker": "T3, Total",
+      "value": "1.01",
+      "min_range": "0.60",
+      "max_range": "1.81"
+    },
+    {
+      "marker": "T4, Total",
+      "value": "10.2",
+      "min_range": "4.5",
+      "max_range": "12.6"
+    },
+    {
+      "marker": "Thyroid Stimulating Hormone - Ultra Sensitive",
+      "value": "0.785",
+      "min_range": "0.55",
+      "max_range": "4.78"
+    },
+    {
+      "marker": "Rheumatoid Factor - Quantitative",
+      "value": "9.3",
+      "min_range": "0",
+      "max_range": "14"
+    },
+    {
+      "marker": "Anti-CCP",
+      "value": "0.5",
+      "min_range": null,
+      "max_range": "4.99"
+    },
+    {
+      "marker": "Immunoglobulin E (IgE) Total",
+      "value": "34",
+      "min_range": "0",
+      "max_range": "158"
+    },
+    {
+      "marker": "Testosterone, total",
+      "value": "579.19",
+      "min_range": "220.91",
+      "max_range": "715.81"
+    },
+    {
+      "marker": "Prostate Specific Antigen, total",
+      "value": "0.725",
+      "min_range": "0",
+      "max_range": "4"
+    }
+  ],
+  "test_date": "12/03/2025"
+}
