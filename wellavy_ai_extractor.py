@@ -82,33 +82,34 @@ class WellavyAIExtractor:
             
             return f"""Extract blood test results from the PDF. Return ONLY valid JSON with no extra text.
 
-Database markers for mapping:
+Database markers for mapping (extract ONLY these if found):
 {marker_list}
 
-For each test result, provide:
-- original_marker: name from PDF
-- value: the number
-- mapped_marker_name: matching database name or null
-- mapped_marker_id: matching database ID or null
+IMPORTANT INSTRUCTIONS:
+1. Extract ONLY markers that match the database list above
+2. Ignore all other markers in the PDF
+3. Return ONLY valid JSON, no markdown, no explanations
+4. Maximum 100 results even if more markers match
+
+For each matched marker, provide:
+{{
+    "original_marker": "exact name from PDF",
+    "value": "numeric value",
+    "min_range": null,
+    "max_range": null,
+    "mapped_marker_name": "matching database name",
+    "mapped_marker_id": "matching database ID",
+    "confidence": 0.9
+}}
 
 Return this exact JSON structure:
 {{
     "success": true,
-    "test_date": null,
-    "results": [
-        {{
-            "original_marker": "name",
-            "value": "number",
-            "min_range": null,
-            "max_range": null,
-            "mapped_marker_name": null,
-            "mapped_marker_id": null,
-            "confidence": 0.0
-        }}
-    ]
+    "test_date": "YYYY-MM-DD or null",
+    "results": []
 }}
 
-IMPORTANT: Return ONLY the JSON object. No explanations. No markdown."""
+CRITICAL: Return ONLY the JSON object. No text before or after."""
         
         else:
             # Original prompt without mapping
