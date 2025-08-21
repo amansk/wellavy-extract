@@ -152,8 +152,6 @@ Important guidelines:
         # Log the prompt being sent
         logger.info(f"Prompt length: {len(prompt)} characters")
         logger.info(f"Number of database markers: {len(self.database_markers)}")
-        if self.database_markers:
-            logger.info(f"First 3 markers: {self.database_markers[:3]}")
         logger.debug(f"Full prompt:\n{prompt}")
         
         try:
@@ -187,12 +185,13 @@ Important guidelines:
             
             # Log response details for debugging
             logger.info(f"Claude response length: {len(content)} characters")
-            logger.info(f"Claude response (first 1000 chars): {content[:1000]}")
-            logger.info(f"Claude response (last 1000 chars): {content[-1000:] if len(content) > 1000 else content}")
             
             # Count newlines to understand structure
             line_count = content.count('\n') + 1
             logger.info(f"Response has {line_count} lines")
+            
+            # Log full response for debugging
+            logger.info(f"Full Claude response:\n{content}")
             
             # Find JSON in the response
             start_idx = content.find('{')
