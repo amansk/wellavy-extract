@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Header, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Header, Body, Form
 from typing import Optional, List, Dict
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -120,7 +120,7 @@ async def ai_extract_mapped(
     file: UploadFile = File(...),
     x_api_key: str = Header(..., alias="X-API-Key"),
     include_ranges: bool = Query(True, description="Include reference ranges in output"),
-    database_markers: Optional[str] = Body(None, description="JSON string of database markers for mapping")
+    database_markers: Optional[str] = Form(None, description="JSON string of database markers for mapping")
 ):
     """
     Extract blood test results using AI with intelligent marker mapping to database.
