@@ -4,6 +4,27 @@ Created by vibe coding with Claude Code. Excuse the code quality.
 
 A robust CLI tool to extract blood test information from lab report PDFs and output the results as CSV files. Supports multiple lab formats including Quest Diagnostics, LabCorp, and Cleveland HeartLab.
 
+## Scripts Overview
+
+### Core Extraction Scripts
+- **`pdf_to_csv.py`** - Original rule-based PDF extractor for Quest/LabCorp formats using pattern matching
+- **`unified_ai_extractor.py`** - AI-powered extractor using Claude or OpenAI for any PDF format
+- **`wellavy_ai_extractor.py`** - Wellavy-specific extractor with intelligent database marker mapping
+
+### API Service
+- **`api.py`** - FastAPI service providing HTTP endpoints for PDF extraction
+  - `/api/v1/ai-extract` - Basic AI extraction
+  - `/api/v1/ai-extract-mapped` - AI extraction with Wellavy database marker mapping
+  - `/convert` - Legacy rule-based extraction
+
+### Test Scripts
+- **`test_api.py`** - Tests for the API endpoints
+- **`test_ai_api.py`** - Tests specifically for AI extraction endpoints
+
+### Utility Scripts
+- **`run_unified_extractor.sh`** - Shell script to run the unified AI extractor
+- **`install.sh`** - Installation script for dependencies
+
 ## Features
 
 - **Multi-format Support**: Handles Quest Diagnostics (Analyte/Value), LabCorp, Function Health Dashboard, and Vibrant America formats
@@ -248,6 +269,74 @@ curl -X POST "https://bloodpdftocsv.amandeep.app/api/v1/ai-extract" \
 curl -X POST "https://bloodpdftocsv.amandeep.app/api/v1/ai-extract?include_ranges=true" \
   -H "X-API-Key: your-api-key" \
   -F "file=@blood_test.pdf"
+```
+
+#### 3. AI Extraction with Database Marker Mapping (Wellavy)
+
+**POST** `/api/v1/ai-extract-mapped` - Extract and map to database markers
+
+This endpoint is designed specifically for Wellavy integration, intelligently mapping extracted markers to a provided database schema.
+
+**Authentication Required:** Include API key in header
+```
+X-API-Key: your-api-key-here
+```
+
+**Request:**
+- `file`: PDF file to extract (multipart/form-data)
+- `database_markers`: JSON array of database markers (in form data)
+
+**Database Markers Format:**
+```json
+[
+  {"id": "be9a1341-7ce3-4e18-b3d8-4147d5bb6366", "name": "Glucose"},
+  {"id": "b562e4ad-2f5d-4da6-8eb7-4b7ece904d69", "name": "Cholesterol, Total"},
+  {"id": "340c24f2-6e6b-4ab8-9a3b-719d4b557d88", "name": "WBC"}
+]
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "test_date": "07/22/2025",
+  "lab_name": "Wild Health",
+  "marker_count": 83,
+  "mapping_stats": {
+    "total_extracted": 83,
+    "successfully_mapped": 75,
+    "unmapped": 8,
+    "mapping_rate": 0.90
+  },
+  "results": [
+    {
+      "original_marker": "Cholesterol Total",
+      "value": "155",
+      "unit": "mg/dL",
+      "min_range": "100",
+      "max_range": "199",
+      "mapped_marker_name": "Cholesterol, Total",
+      "mapped_marker_id": "b562e4ad-2f5d-4da6-8eb7-4b7ece904d69",
+      "confidence": 0.95
+    }
+  ]
+}
+```
+
+**Mapping Features:**
+- Intelligent marker name matching (handles variations like "Total Cholesterol" → "Cholesterol, Total")
+- Confidence scores for each mapping
+- Preserves original marker names for audit trail
+- Maps common abbreviations (WBC, RBC, CRP, etc.)
+- Handles lab-specific naming conventions
+
+**Example:**
+```bash
+# Extract with marker mapping
+curl -X POST "https://extract.wellavy.co/api/v1/ai-extract-mapped?include_ranges=true" \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@blood_test.pdf" \
+  -F "database_markers=$(cat markers.json)"
 ```
 
 ### Deployment on Railway
