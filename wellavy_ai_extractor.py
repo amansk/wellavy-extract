@@ -9,6 +9,7 @@ import sys
 import json
 import base64
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import click
@@ -178,12 +179,36 @@ Important guidelines:
             
             # Extract JSON from response
             content = response.content[0].text
+            
+            # Log first part of response for debugging
+            logger.debug(f"Claude response (first 500 chars): {content[:500]}")
+            
             # Find JSON in the response
             start_idx = content.find('{')
             end_idx = content.rfind('}') + 1
             if start_idx != -1 and end_idx > start_idx:
                 json_str = content[start_idx:end_idx]
-                return json.loads(json_str)
+                
+                # Try to parse, with better error handling
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error: {e}")
+                    logger.error(f"Attempting to extract around line {e.lineno}")
+                    
+                    # Try to clean common issues
+                    # Remove trailing commas
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
+                    
+                    try:
+                        return json.loads(json_str)
+                    except:
+                        logger.error(f"Failed to parse even after cleanup")
+                        # Save for debugging
+                        with open("failed_response.json", "w") as f:
+                            f.write(json_str)
+                        raise
             else:
                 logger.error("No JSON found in Claude response")
                 return {"results": [], "test_date": None}
