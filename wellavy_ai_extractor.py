@@ -157,7 +157,7 @@ Important guidelines:
         try:
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=4000,
+                max_tokens=8000,  # Increased to handle larger responses
                 temperature=0,
                 messages=[
                     {
