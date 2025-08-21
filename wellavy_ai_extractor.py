@@ -1,52 +1,49 @@
 #!/usr/bin/env python3
 """
-Wellavy-specific AI extractor with intelligent marker mapping.
-This extractor is designed to work with Wellavy's blood marker database.
+Wellavy AI Extractor with intelligent marker mapping for blood test PDFs.
+Based on the working unified_ai_extractor with added database marker mapping.
 """
 
 import os
+import sys
 import json
 import base64
 import logging
-from typing import Dict, List, Optional
 from pathlib import Path
+from typing import Dict, List, Tuple, Optional
 import click
+from dotenv import load_dotenv
 
-# Try importing AI libraries
+# Load environment variables
+load_dotenv('.env.local')
+
+# Import AI service clients
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
-
+    
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 class WellavyAIExtractor:
-    """AI-powered blood test extractor with database marker mapping."""
+    """Wellavy extractor with intelligent database marker mapping."""
     
     def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None):
-        """
-        Initialize the Wellavy AI extractor.
-        
-        Args:
-            service: AI service to use ('claude' or 'openai')
-            database_markers: List of database markers for mapping
-                             Each marker should have 'id' and 'name' keys
-        """
         self.service = service.lower()
         self.database_markers = database_markers or []
-        self.client = self._init_client()
+        self.client = self._initialize_client()
         
-    def _init_client(self):
+    def _initialize_client(self):
         """Initialize the appropriate AI client based on service selection."""
         if self.service == "claude":
             if not ANTHROPIC_AVAILABLE:
@@ -72,118 +69,95 @@ class WellavyAIExtractor:
         with open(pdf_path, 'rb') as pdf_file:
             return base64.b64encode(pdf_file.read()).decode('utf-8')
     
-    def create_extraction_prompt_with_mapping(self) -> str:
-        """Create a detailed prompt for AI extraction with marker mapping."""
+    def create_extraction_prompt(self) -> str:
+        """Create a detailed prompt for AI extraction with optional marker mapping."""
         
-        # If we have database markers, include mapping instructions
+        # If we have database markers, create mapping prompt
         if self.database_markers:
-            # Create a formatted list of available markers
             marker_list = "\n".join([f"- {m['name']} (ID: {m['id']})" 
                                     for m in self.database_markers])
             
-            return f"""Extract all blood test results from the provided lab report PDF and map them to our database markers.
+            return f"""Extract all blood test results from the PDF and map them to our database markers.
 
 AVAILABLE DATABASE MARKERS:
 {marker_list}
 
-TASK:
-1. Extract every blood test marker from the PDF
-2. For each marker, capture the exact name as it appears in the PDF
-3. Extract the numeric value (remove units)
-4. Extract reference ranges if available
-5. Map each marker to the most appropriate database marker from the list above
-6. Assign a confidence score (0.0-1.0) for each mapping
+For each marker in the PDF:
+1. Extract the exact name as it appears
+2. Extract the numeric value  
+3. Extract reference ranges if available
+4. Map to the best matching database marker above
+5. Provide confidence score (0.0-1.0)
 
-MAPPING RULES:
-- Match intelligently, ignoring minor variations in punctuation, spacing, and word order
-- Common mappings to remember:
-  * "Cholesterol Total" or "Total Cholesterol" → "Cholesterol, Total"
-  * "White Blood Cell Count" or "WBC Count" → "WBC"
-  * "Red Blood Cell Count" or "RBC Count" → "RBC"
-  * "Hemoglobin A1c" or "HbA1c" or "Glycated Hemoglobin" → Match to HbA1c if in database
-  * "Testosterone Total" or "Total Testosterone" → "Testosterone, Total"
-  * "Testosterone Free" or "Free Testosterone" → "Testosterone, Free"
-  * "Carbon Dioxide" or "CO2" → "CO2 (Bicarbonate)"
-  * "C-Reactive Protein" or "CRP" → Match to CRP/hs-CRP variant in database
-  * "Vitamin D 25-OH Total" or "25-Hydroxyvitamin D" → "Vitamin D"
-  * "T4 Free" or "Free T4" or "Thyroxine Free" → Match to Free T4 if in database
-  * "T3 Free" or "Free T3" or "Triiodothyronine Free" → Match to Free T3 if in database
-  * "Sex Hormone Binding Globulin" or "SHBG" → Match to SHBG if in database
-  * "Alkaline Phosphatase" or "ALP" → Match to ALP if in database
-  * "Urea Nitrogen" or "BUN" or "Blood Urea Nitrogen" → Match to BUN if in database
-  * "Protein Total" or "Total Protein" → Match to Total Protein if in database
-  * "Bilirubin Total" or "Total Bilirubin" → Match to appropriate bilirubin marker
-
-- If no good match exists (confidence < 0.5), set mapped_marker_name and mapped_marker_id to null
-- Percentage markers (like "Neutrophils %") should map to percentage variants if they exist
-- Absolute counts should map to absolute variants (like "Absolute Neutrophils")
+MAPPING EXAMPLES:
+- "Cholesterol Total" → "Cholesterol, Total"
+- "White Blood Cell Count" → "WBC"
+- "Hemoglobin A1c" → "HbA1c" (if in database)
+- "Testosterone Total" → "Testosterone, Total"
 
 OUTPUT FORMAT (JSON):
 {{
     "success": true,
-    "test_date": "MM/DD/YYYY or null if not found",
-    "lab_name": "detected lab name or null",
+    "test_date": "MM/DD/YYYY or null",
     "results": [
         {{
             "original_marker": "exact name from PDF",
-            "value": "numeric value as string",
-            "unit": "unit if found or null",
-            "min_range": "minimum reference value or null",
-            "max_range": "maximum reference value or null",
-            "mapped_marker_name": "exact database marker name or null",
-            "mapped_marker_id": "database marker UUID or null",
-            "confidence": 0.95
+            "value": "numeric value",
+            "min_range": "min or null",
+            "max_range": "max or null", 
+            "mapped_marker_name": "database name or null",
+            "mapped_marker_id": "database ID or null",
+            "confidence": 0.0-1.0
         }}
     ]
 }}
 
-IMPORTANT:
-- Include ALL markers found in the PDF, even if they don't map to database markers
-- Preserve exact marker names from the PDF in "original_marker"
-- Return numeric values as strings to preserve precision
-- Set confidence to 0.0 for unmapped markers
-- Extract test date in MM/DD/YYYY format if found
-"""
+Include ALL markers, even if no match. Set mapped fields to null if confidence < 0.5."""
+        
         else:
-            # Fallback to simple extraction without mapping
-            return """Extract all blood test results from the provided lab report PDF.
+            # Original prompt without mapping
+            return """Extract all blood test results from the provided lab report PDF. 
 
 For each marker found, extract:
-1. The marker name exactly as it appears
-2. The numeric value (as string to preserve precision)
-3. The unit if available
-4. The reference range if available
+1. The marker name (standardize common variations)
+2. The value (numeric result)
+3. The reference range (if available)
 
-OUTPUT FORMAT (JSON):
+Format the output as JSON with this structure:
 {
-    "success": true,
-    "test_date": "MM/DD/YYYY or null if not found",
-    "lab_name": "detected lab name or null",
     "results": [
         {
-            "original_marker": "exact marker name",
-            "value": "numeric value as string",
-            "unit": "unit or null",
-            "min_range": "minimum reference or null",
-            "max_range": "maximum reference or null"
+            "marker": "marker name",
+            "value": "numeric value",
+            "min_range": "minimum reference value or null",
+            "max_range": "maximum reference value or null"
         }
-    ]
+    ],
+    "test_date": "date of test if found, or null"
 }
 
-Extract ALL markers found in the report, preserving exact names and values."""
+Important guidelines:
+- Standardize marker names (e.g., "Glucose, Fasting" → "Glucose")
+- Include ALL markers found in the report
+- For ranges like "10-50", set min_range="10" and max_range="50"
+- For ranges like "<100", set min_range=null and max_range="100"
+- For ranges like ">40", set min_range="40" and max_range=null
+- Extract numeric values only (remove units)
+- If no range is provided, set both min_range and max_range to null
+"""
     
     def extract_with_claude(self, pdf_base64: str) -> Dict:
-        """Extract data using Claude with marker mapping."""
-        prompt = self.create_extraction_prompt_with_mapping()
+        """Extract data using Claude."""
+        prompt = self.create_extraction_prompt()
         
         try:
-            message = self.client.messages.create(
+            response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=4000,
                 temperature=0,
                 messages=[
                     {
-                        "role": "user",
+                        "role": "user", 
                         "content": [
                             {
                                 "type": "text",
@@ -202,26 +176,25 @@ Extract ALL markers found in the report, preserving exact names and values."""
                 ]
             )
             
-            # Parse the response
-            response_text = message.content[0].text
-            
-            # Try to extract JSON from the response
-            if "```json" in response_text:
-                json_str = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                json_str = response_text.split("```")[1].split("```")[0].strip()
+            # Extract JSON from response
+            content = response.content[0].text
+            # Find JSON in the response
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+            if start_idx != -1 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx]
+                return json.loads(json_str)
             else:
-                json_str = response_text.strip()
-            
-            return json.loads(json_str)
+                logger.error("No JSON found in Claude response")
+                return {"results": [], "test_date": None}
                 
         except Exception as e:
             logger.error(f"Error with Claude extraction: {e}")
             raise
     
     def extract_with_openai(self, pdf_base64: str) -> Dict:
-        """Extract data using OpenAI with marker mapping."""
-        prompt = self.create_extraction_prompt_with_mapping()
+        """Extract data using OpenAI GPT-4o."""
+        prompt = self.create_extraction_prompt()
         
         try:
             response = self.client.chat.completions.create(
@@ -255,83 +228,87 @@ Extract ALL markers found in the report, preserving exact names and values."""
             raise
     
     def extract(self, pdf_path: str) -> Dict:
-        """
-        Extract blood test data from PDF with optional marker mapping.
-        
-        Args:
-            pdf_path: Path to the PDF file
-            
-        Returns:
-            Dictionary with extraction results including mapped markers
-        """
+        """Extract blood test data from PDF using selected AI service."""
         # Encode PDF as base64
         pdf_base64 = self.encode_pdf_to_base64(pdf_path)
         
         # Extract using appropriate service
         if self.service == "claude":
-            results = self.extract_with_claude(pdf_base64)
+            return self.extract_with_claude(pdf_base64)
         else:  # openai
-            results = self.extract_with_openai(pdf_base64)
+            return self.extract_with_openai(pdf_base64)
+    
+    def format_results_as_csv(self, results: Dict, include_ranges: bool = False) -> str:
+        """Format extraction results as CSV."""
+        lines = []
         
-        # Add metadata
-        results['extraction_service'] = self.service
-        results['markers_mapped'] = len(self.database_markers) > 0
+        # Add header
+        if include_ranges:
+            lines.append("Test Name,Value,MinRange,MaxRange")
+        else:
+            lines.append("Test Name,Value")
         
-        # Calculate mapping statistics
-        if self.database_markers and 'results' in results:
-            mapped_count = sum(1 for r in results['results'] 
-                             if r.get('mapped_marker_id') is not None)
-            unmapped_count = len(results['results']) - mapped_count
+        # Add results
+        for result in results.get("results", []):
+            marker = result.get("marker", "")
+            value = result.get("value", "")
             
-            results['mapping_stats'] = {
-                'total_extracted': len(results['results']),
-                'successfully_mapped': mapped_count,
-                'unmapped': unmapped_count,
-                'mapping_rate': mapped_count / len(results['results']) if results['results'] else 0
-            }
+            if include_ranges:
+                min_range = result.get("min_range", "")
+                max_range = result.get("max_range", "")
+                lines.append(f'"{marker}","{value}","{min_range}","{max_range}"')
+            else:
+                lines.append(f'"{marker}","{value}"')
         
-        return results
+        return "\n".join(lines)
 
 
 @click.command()
 @click.argument('pdf_path', type=click.Path(exists=True))
-@click.option('--service', '-s', type=click.Choice(['claude', 'openai']), 
-              default='claude', help='AI service to use')
-@click.option('--markers-file', '-m', type=click.Path(exists=True),
-              help='JSON file containing database markers for mapping')
-@click.option('--output', '-o', type=click.Path(),
-              help='Output JSON file path')
-def main(pdf_path: str, service: str, markers_file: Optional[str], output: Optional[str]):
-    """Extract blood test results with intelligent marker mapping."""
-    
-    # Load database markers if provided
-    database_markers = []
-    if markers_file:
-        with open(markers_file, 'r') as f:
-            database_markers = json.load(f)
-        logger.info(f"Loaded {len(database_markers)} database markers for mapping")
-    
-    # Initialize extractor
-    extractor = WellavyAIExtractor(service=service, database_markers=database_markers)
-    
-    logger.info(f"Processing {pdf_path} with {service}...")
-    
-    # Extract data
-    results = extractor.extract(pdf_path)
-    
-    # Output results
-    if output:
-        with open(output, 'w') as f:
-            json.dump(results, f, indent=2)
-        logger.info(f"Results saved to {output}")
-    else:
-        print(json.dumps(results, indent=2))
-    
-    # Print summary
-    if 'mapping_stats' in results:
-        stats = results['mapping_stats']
-        logger.info(f"Extraction complete: {stats['total_extracted']} markers found")
-        logger.info(f"Mapped: {stats['successfully_mapped']}, Unmapped: {stats['unmapped']}")
+@click.option('--service', '-s', type=click.Choice(['claude', 'openai', 'gpt4o']), 
+              default='claude', help='AI service to use for extraction')
+@click.option('--output', '-o', type=click.Path(), 
+              help='Output CSV file path (defaults to input filename with .csv extension)')
+@click.option('--include-ranges', '-r', is_flag=True, 
+              help='Include reference ranges in output')
+@click.option('--json', 'output_json', is_flag=True, 
+              help='Output raw JSON instead of CSV')
+def main(pdf_path: str, service: str, output: Optional[str], include_ranges: bool, output_json: bool):
+    """Extract blood test results from PDF using AI services."""
+    try:
+        # Initialize extractor
+        if service == 'gpt4o':
+            service = 'openai'
+        extractor = WellavyAIExtractor(service=service)
+        
+        logger.info(f"Processing {pdf_path} with {service}...")
+        
+        # Extract data
+        results = extractor.extract(pdf_path)
+        
+        # Determine output path
+        if not output:
+            output = Path(pdf_path).stem + ('.json' if output_json else '.csv')
+        
+        # Save results
+        if output_json:
+            with open(output, 'w') as f:
+                json.dump(results, f, indent=2)
+            logger.info(f"Results saved to {output}")
+        else:
+            csv_content = extractor.format_results_as_csv(results, include_ranges)
+            with open(output, 'w') as f:
+                f.write(csv_content)
+            logger.info(f"Results saved to {output}")
+            
+        # Print summary
+        num_results = len(results.get("results", []))
+        test_date = results.get("test_date", "Unknown")
+        logger.info(f"Extracted {num_results} markers from test dated {test_date}")
+        
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
