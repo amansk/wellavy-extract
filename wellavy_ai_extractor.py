@@ -85,10 +85,11 @@ Available database markers for mapping:
 {marker_list}
 
 INSTRUCTIONS:
-1. Extract EVERY test result from the PDF
+1. Extract ALL test results from the PDF (maximum 200 results)
 2. For each result, try to match it to a database marker above
 3. If no match found, still include it with null mapping
 4. Return ONLY valid JSON, no markdown, no explanations
+5. IMPORTANT: Ensure proper JSON syntax with commas between all array elements
 
 For each test result, provide:
 {{
@@ -197,6 +198,10 @@ Important guidelines:
                     # Remove trailing commas
                     json_str = re.sub(r',\s*}', '}', json_str)
                     json_str = re.sub(r',\s*]', ']', json_str)
+                    # Fix missing commas between objects
+                    json_str = re.sub(r'}\s*{', '},{', json_str)
+                    # Remove any null bytes or special characters
+                    json_str = json_str.replace('\x00', '').replace('\r', '')
                     
                     try:
                         return json.loads(json_str)
