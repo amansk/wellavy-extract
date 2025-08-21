@@ -147,6 +147,13 @@ Important guidelines:
         """Extract data using Claude."""
         prompt = self.create_extraction_prompt()
         
+        # Log the prompt being sent
+        logger.info(f"Prompt length: {len(prompt)} characters")
+        logger.info(f"Number of database markers: {len(self.database_markers)}")
+        if self.database_markers:
+            logger.info(f"First 3 markers: {self.database_markers[:3]}")
+        logger.debug(f"Full prompt:\n{prompt}")
+        
         try:
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -178,14 +185,21 @@ Important guidelines:
             
             # Log response details for debugging
             logger.info(f"Claude response length: {len(content)} characters")
-            logger.debug(f"Claude response (first 500 chars): {content[:500]}")
-            logger.debug(f"Claude response (last 500 chars): {content[-500:] if len(content) > 500 else content}")
+            logger.info(f"Claude response (first 1000 chars): {content[:1000]}")
+            logger.info(f"Claude response (last 1000 chars): {content[-1000:] if len(content) > 1000 else content}")
+            
+            # Count newlines to understand structure
+            line_count = content.count('\n') + 1
+            logger.info(f"Response has {line_count} lines")
             
             # Find JSON in the response
             start_idx = content.find('{')
             end_idx = content.rfind('}') + 1
+            logger.info(f"JSON boundaries: start at char {start_idx}, end at char {end_idx}")
+            
             if start_idx != -1 and end_idx > start_idx:
                 json_str = content[start_idx:end_idx]
+                logger.info(f"Extracted JSON length: {len(json_str)} characters")
                 
                 # Try to parse, with better error handling
                 try:
