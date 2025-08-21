@@ -75,45 +75,40 @@ class WellavyAIExtractor:
         
         # If we have database markers, create mapping prompt
         if self.database_markers:
+            # Limit to prevent overwhelming the model
+            markers_to_use = self.database_markers[:50] if len(self.database_markers) > 50 else self.database_markers
             marker_list = "\n".join([f"- {m['name']} (ID: {m['id']})" 
-                                    for m in self.database_markers])
+                                    for m in markers_to_use])
             
-            return f"""Extract all blood test results from the PDF and map them to our database markers.
+            return f"""Extract blood test results from the PDF. Return ONLY valid JSON with no extra text.
 
-AVAILABLE DATABASE MARKERS:
+Database markers for mapping:
 {marker_list}
 
-For each marker in the PDF:
-1. Extract the exact name as it appears
-2. Extract the numeric value  
-3. Extract reference ranges if available
-4. Map to the best matching database marker above
-5. Provide confidence score (0.0-1.0)
+For each test result, provide:
+- original_marker: name from PDF
+- value: the number
+- mapped_marker_name: matching database name or null
+- mapped_marker_id: matching database ID or null
 
-MAPPING EXAMPLES:
-- "Cholesterol Total" → "Cholesterol, Total"
-- "White Blood Cell Count" → "WBC"
-- "Hemoglobin A1c" → "HbA1c" (if in database)
-- "Testosterone Total" → "Testosterone, Total"
-
-OUTPUT FORMAT (JSON):
+Return this exact JSON structure:
 {{
     "success": true,
-    "test_date": "MM/DD/YYYY or null",
+    "test_date": null,
     "results": [
         {{
-            "original_marker": "exact name from PDF",
-            "value": "numeric value",
-            "min_range": "min or null",
-            "max_range": "max or null", 
-            "mapped_marker_name": "database name or null",
-            "mapped_marker_id": "database ID or null",
-            "confidence": 0.0-1.0
+            "original_marker": "name",
+            "value": "number",
+            "min_range": null,
+            "max_range": null,
+            "mapped_marker_name": null,
+            "mapped_marker_id": null,
+            "confidence": 0.0
         }}
     ]
 }}
 
-Include ALL markers, even if no match. Set mapped fields to null if confidence < 0.5."""
+IMPORTANT: Return ONLY the JSON object. No explanations. No markdown."""
         
         else:
             # Original prompt without mapping
@@ -180,8 +175,10 @@ Important guidelines:
             # Extract JSON from response
             content = response.content[0].text
             
-            # Log first part of response for debugging
+            # Log response details for debugging
+            logger.info(f"Claude response length: {len(content)} characters")
             logger.debug(f"Claude response (first 500 chars): {content[:500]}")
+            logger.debug(f"Claude response (last 500 chars): {content[-500:] if len(content) > 500 else content}")
             
             # Find JSON in the response
             start_idx = content.find('{')
@@ -203,11 +200,15 @@ Important guidelines:
                     
                     try:
                         return json.loads(json_str)
-                    except:
-                        logger.error(f"Failed to parse even after cleanup")
+                    except Exception as parse_error:
+                        logger.error(f"Failed to parse even after cleanup: {parse_error}")
                         # Save for debugging
                         with open("failed_response.json", "w") as f:
                             f.write(json_str)
+                        # Also save the full raw response
+                        with open("failed_response_raw.txt", "w") as f:
+                            f.write(content)
+                        logger.error(f"Saved failed response to failed_response.json and failed_response_raw.txt")
                         raise
             else:
                 logger.error("No JSON found in Claude response")
