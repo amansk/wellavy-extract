@@ -10,6 +10,7 @@ import logging
 import json
 from unified_ai_extractor import UnifiedAIExtractor
 from wellavy_ai_extractor import WellavyAIExtractor
+from smart_ai_extractor import SmartAIExtractor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -123,7 +124,8 @@ async def ai_extract_mapped(
     database_markers: Optional[str] = Form(None, description="JSON string of database markers for mapping")
 ):
     """
-    Extract blood test results using AI with intelligent marker mapping to database.
+    Extract health data using AI with automatic document type detection.
+    Automatically detects if PDF is a blood test or InBody report and uses appropriate extractor.
     Maps extracted markers to provided database markers for accurate imports.
     
     Args:
@@ -133,7 +135,7 @@ async def ai_extract_mapped(
         database_markers: JSON string containing array of database markers with 'id' and 'name' keys
         
     Returns:
-        JSON with extracted and mapped blood test results
+        JSON with extracted and mapped health data (blood test or InBody results)
     """
     # Check API key
     api_secret_key = os.getenv("API_SECRET_KEY")
@@ -165,10 +167,10 @@ async def ai_extract_mapped(
             temp_pdf_path = temp_pdf.name
         
         try:
-            # Initialize the Wellavy AI extractor with mapping capability
-            extractor = WellavyAIExtractor(service="claude", database_markers=markers_list)
+            # Initialize the Smart AI extractor with automatic document detection
+            extractor = SmartAIExtractor(service="claude", database_markers=markers_list)
             
-            # Extract data with mapping
+            # Extract data with automatic type detection and routing
             results = extractor.extract(temp_pdf_path)
             
             # Check if we got results
@@ -190,11 +192,16 @@ async def ai_extract_mapped(
                 logger.info(f"Extraction complete: {stats['total_extracted']} markers, "
                           f"{stats['successfully_mapped']} mapped, {stats['unmapped']} unmapped")
             
-            # Return enhanced response
+            # Extract document detection info
+            doc_detection = results.get("document_detection", {})
+            
+            # Return enhanced response with document type information
             return {
                 "success": True,
+                "document_type": doc_detection.get("document_type", "unknown"),
+                "confidence": doc_detection.get("confidence", "unknown"),
                 "test_date": results.get("test_date"),
-                "lab_name": results.get("lab_name"),
+                "lab_name": doc_detection.get("lab_name") or results.get("lab_name"),
                 "marker_count": len(results.get("results", [])),
                 "mapping_stats": results.get("mapping_stats"),
                 "results": results.get("results", [])
@@ -212,6 +219,7 @@ async def ai_extract_mapped(
             status_code=500,
             detail=f"Error processing PDF: {str(e)}"
         )
+
 
 @app.post("/convert")
 async def convert_pdf_to_csv(
