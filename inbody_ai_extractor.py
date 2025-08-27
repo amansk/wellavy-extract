@@ -358,7 +358,7 @@ def main(pdf_path: str, service: str, output: Optional[str], output_csv: bool, m
             service = 'openai'
         extractor = InBodyAIExtractor(service=service, database_markers=database_markers)
         
-        logger.info(f"Processing InBody report: {pdf_path} with {service}...")
+        logger.info(f"Processing InBody report: {Path(pdf_path).name} with {service}...")
         
         # Extract data
         results = extractor.extract(pdf_path)

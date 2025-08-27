@@ -63,6 +63,9 @@ async def ai_extract(
     if x_api_key != api_secret_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
     
+    # Log received file
+    logger.info(f"Received file for ai-extract: {file.filename}")
+    
     # Validate file type
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="File must be a PDF")
@@ -145,6 +148,9 @@ async def ai_extract_mapped(
     
     if x_api_key != api_secret_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Log received file
+    logger.info(f"Received file for ai-extract-mapped: {file.filename}")
     
     # Validate file type
     if not file.filename.lower().endswith('.pdf'):
@@ -238,6 +244,9 @@ async def convert_pdf_to_csv(
     Returns:
         CSV file as a downloadable attachment
     """
+    # Log received file
+    logger.info(f"Received file for convert: {file.filename}")
+    
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="File must be a PDF")
     

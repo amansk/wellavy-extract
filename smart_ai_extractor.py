@@ -176,7 +176,7 @@ Return ONLY the JSON object, no explanations."""
         pdf_base64 = self.encode_pdf_to_base64(pdf_path)
         
         # Detect document type
-        logger.info(f"Analyzing PDF type for: {pdf_path}")
+        logger.info(f"Analyzing PDF type for: {Path(pdf_path).name}")
         doc_type, detection_info = self.detect_pdf_type(pdf_base64)
         
         # Route to appropriate extractor
@@ -282,7 +282,7 @@ def main(pdf_path: str, service: str, output: Optional[str], output_csv: bool,
             service = 'openai'
         extractor = SmartAIExtractor(service=service, database_markers=database_markers)
         
-        logger.info(f"Processing: {pdf_path} with {service}...")
+        logger.info(f"Processing: {Path(pdf_path).name} with {service}...")
         
         # Extract data with automatic routing
         results = extractor.extract(pdf_path)
