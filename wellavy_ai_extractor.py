@@ -23,6 +23,14 @@ try:
 except ImportError:
     PDF_PROCESSING_AVAILABLE = False
 
+try:
+    import PyPDF2
+    PYPDF2_AVAILABLE = True
+except ImportError:
+    PYPDF2_AVAILABLE = False
+
+import io
+
 # Import token counting utilities
 try:
     from token_counter import (
@@ -111,6 +119,75 @@ class WellavyAIExtractor:
             logger.error(f"Error extracting text from PDF: {e}")
             raise
     
+    def get_pdf_page_count(self, pdf_path: str) -> int:
+        """Get the number of pages in a PDF."""
+        if not PYPDF2_AVAILABLE:
+            raise ImportError("PyPDF2 required for PDF processing")
+            
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            return len(reader.pages)
+    
+    def estimate_pdf_tokens(self, pdf_path: str) -> int:
+        """
+        Estimate token count for a PDF without extracting text.
+        Blood test PDFs average ~3000 tokens per page when sent as PDF.
+        """
+        page_count = self.get_pdf_page_count(pdf_path)
+        # Conservative estimate: 3000 tokens per page for blood test PDFs
+        estimated_pdf_tokens = page_count * 3000
+        
+        # Add prompt and markers
+        prompt_tokens = 4000  # Typical prompt size
+        markers_tokens = len(str(self.database_markers)) // 3  # Rough estimate
+        
+        total_estimate = estimated_pdf_tokens + prompt_tokens + markers_tokens
+        logger.info(f"Estimated tokens - Pages: {page_count}, PDF: {estimated_pdf_tokens}, Total: {total_estimate}")
+        
+        return total_estimate
+    
+    def chunk_pdf_by_pages(self, pdf_path: str, max_pages_per_chunk: int = 5) -> List[str]:
+        """
+        Split a PDF into smaller PDFs by pages.
+        Returns list of base64-encoded PDF chunks.
+        """
+        if not PYPDF2_AVAILABLE:
+            raise ImportError("PyPDF2 required for PDF chunking")
+        
+        chunks = []
+        
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            total_pages = len(reader.pages)
+            
+            # Calculate optimal pages per chunk
+            # With ~3k tokens per page, 5 pages = 15k tokens
+            # Plus 4k prompt + 5k markers = 24k total (under 30k limit)
+            
+            logger.info(f"Splitting {total_pages} page PDF into chunks of {max_pages_per_chunk} pages")
+            
+            for start_page in range(0, total_pages, max_pages_per_chunk):
+                end_page = min(start_page + max_pages_per_chunk, total_pages)
+                
+                # Create new PDF with subset of pages
+                writer = PyPDF2.PdfWriter()
+                for page_num in range(start_page, end_page):
+                    writer.add_page(reader.pages[page_num])
+                
+                # Convert to base64
+                pdf_bytes = io.BytesIO()
+                writer.write(pdf_bytes)
+                pdf_bytes.seek(0)
+                
+                chunk_base64 = base64.b64encode(pdf_bytes.read()).decode('utf-8')
+                chunks.append(chunk_base64)
+                
+                logger.info(f"Created chunk {len(chunks)}: pages {start_page+1}-{end_page}")
+        
+        logger.info(f"Split PDF into {len(chunks)} chunks")
+        return chunks
+    
+    # DEPRECATED: Old text-based chunking - kept for compatibility
     def chunk_pdf_text(self, text: str, max_tokens_per_chunk: int = 18000) -> List[str]:
         """
         Split PDF text into chunks that fit within token limits.
@@ -281,25 +358,35 @@ Important guidelines:
         logger.info(f"Number of database markers: {len(self.database_markers)}")
         
         # Check token count if available
-        if TOKEN_COUNTING_AVAILABLE:
-            # Decode base64 to estimate PDF text size
+        if pdf_path and PYPDF2_AVAILABLE:
+            # Use proper PDF token estimation (not text extraction!)
+            estimated_tokens = self.estimate_pdf_tokens(pdf_path)
+            
+            # Check if within limits
+            if estimated_tokens > self.token_limit:
+                logger.warning(f"Token limit exceeded: {estimated_tokens} > {self.token_limit}")
+                return self._handle_large_document(pdf_path, {"total": estimated_tokens})
+        elif TOKEN_COUNTING_AVAILABLE:
+            # Fallback to old method if no pdf_path provided
             pdf_text_estimate = base64.b64decode(pdf_base64).decode('utf-8', errors='ignore')
             
-            # Calculate tokens
             token_counts = calculate_request_tokens(
                 prompt=prompt,
                 pdf_text=pdf_text_estimate,
                 database_markers=self.database_markers
             )
             
-            logger.info(f"Estimated tokens - Prompt: {token_counts['prompt']}, PDF: {token_counts['pdf_text']}, Markers: {token_counts['markers']}, Total: {token_counts['total']}")
+            logger.info(f"Estimated tokens (fallback): {token_counts['total']}")
             
-            # Check if within limits
             within_limit, error_msg = check_token_limit(token_counts['total'], self.token_limit)
             
             if not within_limit:
                 logger.warning(f"Token limit exceeded: {error_msg}")
-                return self._handle_large_document(pdf_path, token_counts)
+                if pdf_path:
+                    return self._handle_large_document(pdf_path, token_counts)
+                else:
+                    logger.error("Cannot chunk without pdf_path")
+                    raise ValueError("PDF path required for chunking")
             
             # Check if we have capacity in current window
             if self.token_manager and not self.token_manager.can_process(token_counts['total']):
@@ -415,33 +502,30 @@ Important guidelines:
             raise
     
     def _handle_large_document(self, pdf_path: str, token_counts: Dict) -> Dict:
-        """Handle documents that exceed token limits using chunked processing."""
-        logger.info("Document exceeds token limit. Using chunked processing...")
+        """Handle documents that exceed token limits using PDF page chunking."""
+        logger.info("Document exceeds token limit. Using PDF page chunking...")
         
-        if not PDF_PROCESSING_AVAILABLE:
-            logger.error("PDF processing not available. Cannot chunk document.")
-            raise ImportError("pdfplumber required for chunked processing")
+        if not PYPDF2_AVAILABLE:
+            logger.error("PyPDF2 not available. Cannot chunk document.")
+            raise ImportError("PyPDF2 required for PDF chunking")
         
         try:
-            # Extract text from PDF
-            pdf_text = self.extract_text_from_pdf(pdf_path)
+            # Split PDF into smaller PDFs by pages
+            pdf_chunks = self.chunk_pdf_by_pages(pdf_path, max_pages_per_chunk=5)
             
-            # Split into manageable chunks
-            chunks = self.chunk_pdf_text(pdf_text)
-            
-            # Process each chunk
+            # Process each PDF chunk
             all_results = []
             test_date = None
             
-            for i, chunk in enumerate(chunks, 1):
-                logger.info(f"Processing chunk {i}/{len(chunks)}")
+            for i, pdf_chunk_base64 in enumerate(pdf_chunks, 1):
+                logger.info(f"Processing PDF chunk {i}/{len(pdf_chunks)}")
                 
-                # Create text-based prompt for this chunk
-                chunk_prompt = self.create_chunk_extraction_prompt(i, len(chunks))
+                # Create prompt for this chunk
+                chunk_prompt = self.create_chunk_extraction_prompt(i, len(pdf_chunks))
                 
                 try:
-                    # Process chunk with Claude using text (not PDF)
-                    chunk_result = self._extract_chunk_with_claude_text(chunk_prompt, chunk)
+                    # Process chunk with Claude using actual PDF (not text!)
+                    chunk_result = self._extract_chunk_with_claude_pdf(chunk_prompt, pdf_chunk_base64)
                     
                     if chunk_result.get('results'):
                         all_results.extend(chunk_result['results'])
@@ -451,7 +535,7 @@ Important guidelines:
                         test_date = chunk_result['test_date']
                         
                     # Add small delay between requests to avoid rate limits
-                    if i < len(chunks):  # Don't sleep after last chunk
+                    if i < len(pdf_chunks):  # Don't sleep after last chunk
                         time.sleep(1)
                         
                 except Exception as e:
@@ -462,14 +546,14 @@ Important guidelines:
             # Merge and deduplicate results
             merged_results = self._merge_chunk_results(all_results)
             
-            logger.info(f"Chunked processing complete: {len(merged_results)} markers from {len(chunks)} chunks")
+            logger.info(f"Chunked processing complete: {len(merged_results)} markers from {len(pdf_chunks)} chunks")
             
             return {
                 "success": True,
                 "test_date": test_date,
                 "results": merged_results,
                 "processing_info": {
-                    "chunks_processed": len(chunks),
+                    "chunks_processed": len(pdf_chunks),
                     "total_markers": len(merged_results)
                 }
             }
@@ -478,8 +562,64 @@ Important guidelines:
             logger.error(f"Error in chunked processing: {e}")
             raise
     
+    def _extract_chunk_with_claude_pdf(self, prompt: str, pdf_chunk_base64: str) -> Dict:
+        """Extract data from a PDF chunk using Claude - sends actual PDF, not text!"""
+        try:
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,
+                temperature=0,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": pdf_chunk_base64
+                                }
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # Extract JSON from response
+            content = response.content[0].text
+            
+            # Find JSON in the response
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+            
+            if start_idx != -1 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx]
+                
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    # Clean common issues
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
+                    json_str = re.sub(r'}\s*{', '},{', json_str)
+                    json_str = json_str.replace('\x00', '').replace('\r', '')
+                    
+                    return json.loads(json_str)
+            else:
+                return {"results": [], "test_date": None}
+                
+        except Exception as e:
+            logger.error(f"Error processing PDF chunk: {e}")
+            return {"results": [], "test_date": None}
+    
+    # DEPRECATED: Old text-based chunk extraction - kept for compatibility
     def _extract_chunk_with_claude_text(self, prompt: str, text_chunk: str) -> Dict:
-        """Extract data from a text chunk using Claude."""
+        """DEPRECATED: Extract data from a text chunk using Claude."""
         try:
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
