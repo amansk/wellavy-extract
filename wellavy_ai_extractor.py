@@ -10,10 +10,31 @@ import json
 import base64
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import click
 from dotenv import load_dotenv
+
+# Import PDF processing
+try:
+    import pdfplumber
+    PDF_PROCESSING_AVAILABLE = True
+except ImportError:
+    PDF_PROCESSING_AVAILABLE = False
+
+# Import token counting utilities
+try:
+    from token_counter import (
+        calculate_request_tokens, 
+        check_token_limit,
+        split_document_for_chunks,
+        optimize_markers_for_document,
+        TokenManager
+    )
+    TOKEN_COUNTING_AVAILABLE = True
+except ImportError:
+    TOKEN_COUNTING_AVAILABLE = False
 
 # Load environment variables
 load_dotenv('.env.local')
@@ -39,10 +60,12 @@ logger = logging.getLogger(__name__)
 class WellavyAIExtractor:
     """Wellavy extractor with intelligent database marker mapping."""
     
-    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None):
+    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None, token_limit: int = 30000):
         self.service = service.lower()
         self.database_markers = database_markers or []
+        self.token_limit = token_limit
         self.client = self._initialize_client()
+        self.token_manager = TokenManager(token_limit) if TOKEN_COUNTING_AVAILABLE else None
         
     def _initialize_client(self):
         """Initialize the appropriate AI client based on service selection."""
@@ -69,6 +92,110 @@ class WellavyAIExtractor:
         """Encode PDF file to base64 string."""
         with open(pdf_path, 'rb') as pdf_file:
             return base64.b64encode(pdf_file.read()).decode('utf-8')
+    
+    def extract_text_from_pdf(self, pdf_path: str) -> str:
+        """Extract text from PDF using pdfplumber."""
+        if not PDF_PROCESSING_AVAILABLE:
+            raise ImportError("pdfplumber not available. Install with: pip install pdfplumber")
+        
+        text_content = []
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                for page_num, page in enumerate(pdf.pages, 1):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_content.append(f"=== PAGE {page_num} ===\n{page_text}\n")
+                    
+            return "\n".join(text_content)
+        except Exception as e:
+            logger.error(f"Error extracting text from PDF: {e}")
+            raise
+    
+    def chunk_pdf_text(self, text: str, max_tokens_per_chunk: int = 18000) -> List[str]:
+        """
+        Split PDF text into chunks that fit within token limits.
+        Leaves room for prompt + markers (~12k tokens).
+        """
+        if not TOKEN_COUNTING_AVAILABLE:
+            # Fallback: split by character count (rough estimate)
+            max_chars = max_tokens_per_chunk * 3  # ~3 chars per token
+            chunks = []
+            for i in range(0, len(text), max_chars):
+                chunks.append(text[i:i + max_chars])
+            return chunks
+        
+        # Split by pages first
+        pages = text.split("=== PAGE")
+        if len(pages) <= 1:
+            # No page markers, split by paragraphs
+            paragraphs = text.split('\n\n')
+            pages = [f"PAGE 1 ===\n{text}"]  # Treat as single page
+        
+        chunks = []
+        current_chunk = ""
+        current_tokens = 0
+        
+        for page in pages:
+            if not page.strip():
+                continue
+                
+            page_text = page if page.startswith(" ===") else f"=== PAGE{page}"
+            page_tokens = len(page_text) // 3  # Rough estimate
+            
+            # If this page alone exceeds limit, split it further
+            if page_tokens > max_tokens_per_chunk:
+                # Save current chunk if it exists
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+                    current_tokens = 0
+                
+                # Split large page by sentences or paragraphs
+                sentences = page_text.split('. ')
+                page_chunk = ""
+                
+                for sentence in sentences:
+                    sentence_tokens = len(sentence) // 3
+                    if len(page_chunk) // 3 + sentence_tokens > max_tokens_per_chunk:
+                        if page_chunk:
+                            chunks.append(page_chunk)
+                        page_chunk = sentence
+                    else:
+                        page_chunk += (". " if page_chunk else "") + sentence
+                
+                if page_chunk:
+                    chunks.append(page_chunk)
+                    
+            elif current_tokens + page_tokens > max_tokens_per_chunk:
+                # Current chunk + this page exceeds limit
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = page_text
+                current_tokens = page_tokens
+            else:
+                # Add page to current chunk
+                current_chunk += "\n" + page_text if current_chunk else page_text
+                current_tokens += page_tokens
+        
+        # Add final chunk
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        logger.info(f"Split PDF into {len(chunks)} chunks")
+        return chunks
+    
+    def create_chunk_extraction_prompt(self, chunk_number: int, total_chunks: int) -> str:
+        """Create a prompt for extracting from a specific chunk."""
+        base_prompt = self.create_extraction_prompt()
+        
+        # Add chunk context
+        chunk_prefix = f"""
+CHUNK PROCESSING: This is chunk {chunk_number} of {total_chunks} from the PDF.
+Extract ALL test results found in this chunk. Other chunks will handle other parts.
+
+"""
+        
+        return chunk_prefix + base_prompt
     
     def create_extraction_prompt(self) -> str:
         """Create a detailed prompt for AI extraction with optional marker mapping."""
@@ -145,13 +272,45 @@ Important guidelines:
 - If no range is provided, set both min_range and max_range to null
 """
     
-    def extract_with_claude(self, pdf_base64: str) -> Dict:
-        """Extract data using Claude."""
+    def extract_with_claude(self, pdf_base64: str, pdf_path: str = None) -> Dict:
+        """Extract data using Claude with token counting and chunking."""
         prompt = self.create_extraction_prompt()
         
         # Log prompt summary
         logger.info(f"Prompt length: {len(prompt)} characters")
         logger.info(f"Number of database markers: {len(self.database_markers)}")
+        
+        # Check token count if available
+        if TOKEN_COUNTING_AVAILABLE:
+            # Decode base64 to estimate PDF text size
+            pdf_text_estimate = base64.b64decode(pdf_base64).decode('utf-8', errors='ignore')
+            
+            # Calculate tokens
+            token_counts = calculate_request_tokens(
+                prompt=prompt,
+                pdf_text=pdf_text_estimate,
+                database_markers=self.database_markers
+            )
+            
+            logger.info(f"Estimated tokens - Prompt: {token_counts['prompt']}, PDF: {token_counts['pdf_text']}, Markers: {token_counts['markers']}, Total: {token_counts['total']}")
+            
+            # Check if within limits
+            within_limit, error_msg = check_token_limit(token_counts['total'], self.token_limit)
+            
+            if not within_limit:
+                logger.warning(f"Token limit exceeded: {error_msg}")
+                return self._handle_large_document(pdf_path, token_counts)
+            
+            # Check if we have capacity in current window
+            if self.token_manager and not self.token_manager.can_process(token_counts['total']):
+                wait_time = 60  # Wait 60 seconds for rate limit window to reset
+                logger.info(f"Rate limit approaching, waiting {wait_time} seconds...")
+                time.sleep(wait_time)
+                self.token_manager.reset()
+            
+            # Record usage
+            if self.token_manager:
+                self.token_manager.add_usage(token_counts['total'])
         
         try:
             response = self.client.messages.create(
@@ -255,6 +414,208 @@ Important guidelines:
             logger.error(f"Error with OpenAI extraction: {e}")
             raise
     
+    def _handle_large_document(self, pdf_path: str, token_counts: Dict) -> Dict:
+        """Handle documents that exceed token limits using chunked processing."""
+        logger.info("Document exceeds token limit. Using chunked processing...")
+        
+        if not PDF_PROCESSING_AVAILABLE:
+            logger.error("PDF processing not available. Cannot chunk document.")
+            raise ImportError("pdfplumber required for chunked processing")
+        
+        try:
+            # Extract text from PDF
+            pdf_text = self.extract_text_from_pdf(pdf_path)
+            
+            # Split into manageable chunks
+            chunks = self.chunk_pdf_text(pdf_text)
+            
+            # Process each chunk
+            all_results = []
+            test_date = None
+            
+            for i, chunk in enumerate(chunks, 1):
+                logger.info(f"Processing chunk {i}/{len(chunks)}")
+                
+                # Create text-based prompt for this chunk
+                chunk_prompt = self.create_chunk_extraction_prompt(i, len(chunks))
+                
+                try:
+                    # Process chunk with Claude using text (not PDF)
+                    chunk_result = self._extract_chunk_with_claude_text(chunk_prompt, chunk)
+                    
+                    if chunk_result.get('results'):
+                        all_results.extend(chunk_result['results'])
+                    
+                    # Capture test date from any chunk that has it
+                    if chunk_result.get('test_date') and not test_date:
+                        test_date = chunk_result['test_date']
+                        
+                    # Add small delay between requests to avoid rate limits
+                    if i < len(chunks):  # Don't sleep after last chunk
+                        time.sleep(1)
+                        
+                except Exception as e:
+                    logger.error(f"Error processing chunk {i}: {e}")
+                    # Continue with other chunks even if one fails
+                    continue
+            
+            # Merge and deduplicate results
+            merged_results = self._merge_chunk_results(all_results)
+            
+            logger.info(f"Chunked processing complete: {len(merged_results)} markers from {len(chunks)} chunks")
+            
+            return {
+                "success": True,
+                "test_date": test_date,
+                "results": merged_results,
+                "processing_info": {
+                    "chunks_processed": len(chunks),
+                    "total_markers": len(merged_results)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in chunked processing: {e}")
+            raise
+    
+    def _extract_chunk_with_claude_text(self, prompt: str, text_chunk: str) -> Dict:
+        """Extract data from a text chunk using Claude."""
+        try:
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,
+                temperature=0,
+                messages=[
+                    {
+                        "role": "user", 
+                        "content": f"{prompt}\n\nTEXT TO ANALYZE:\n{text_chunk}"
+                    }
+                ]
+            )
+            
+            # Extract JSON from response
+            content = response.content[0].text
+            
+            # Find JSON in the response
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+            
+            if start_idx != -1 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx]
+                
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    # Clean common issues
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
+                    json_str = re.sub(r'}\s*{', '},{', json_str)
+                    json_str = json_str.replace('\x00', '').replace('\r', '')
+                    
+                    return json.loads(json_str)
+            else:
+                return {"results": [], "test_date": None}
+                
+        except Exception as e:
+            logger.error(f"Error processing text chunk: {e}")
+            return {"results": [], "test_date": None}
+    
+    def _merge_chunk_results(self, all_results: List[Dict]) -> List[Dict]:
+        """Merge and deduplicate results from multiple chunks."""
+        if not all_results:
+            return []
+        
+        # Use a dictionary to track unique markers
+        # Key: (marker_name, value) to handle same marker with different values
+        unique_markers = {}
+        
+        for result in all_results:
+            marker_name = result.get('marker', '').strip().lower()
+            marker_value = str(result.get('value', '')).strip()
+            marker_id = result.get('marker_id')
+            
+            if not marker_name or not marker_value:
+                continue
+                
+            # Create unique key
+            key = (marker_name, marker_value)
+            
+            # If we haven't seen this marker+value combination, add it
+            if key not in unique_markers:
+                unique_markers[key] = result
+            else:
+                # If we have a marker_id in new result but not in existing, update it
+                existing = unique_markers[key]
+                if marker_id and not existing.get('marker_id'):
+                    existing['marker_id'] = marker_id
+                    # Also use the properly formatted marker name if we have an ID
+                    if marker_id:
+                        existing['marker'] = result.get('marker', existing['marker'])
+        
+        # Convert back to list, sorted by marker name
+        merged_results = list(unique_markers.values())
+        merged_results.sort(key=lambda x: x.get('marker', '').lower())
+        
+        logger.info(f"Merged {len(all_results)} raw results into {len(merged_results)} unique markers")
+        return merged_results
+    
+    def _extract_with_claude_basic(self, pdf_base64: str) -> Dict:
+        """Basic extraction without token checking (original method)."""
+        prompt = self.create_extraction_prompt()
+        
+        try:
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,
+                temperature=0,
+                messages=[
+                    {
+                        "role": "user", 
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": pdf_base64
+                                }
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # Extract JSON from response
+            content = response.content[0].text
+            
+            # Find JSON in the response
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+            
+            if start_idx != -1 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx]
+                
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    # Clean common issues
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
+                    json_str = re.sub(r'}\s*{', '},{', json_str)
+                    json_str = json_str.replace('\x00', '').replace('\r', '')
+                    
+                    return json.loads(json_str)
+            else:
+                return {"results": [], "test_date": None}
+                
+        except Exception as e:
+            logger.error(f"Error with Claude extraction: {e}")
+            raise
+    
     def extract(self, pdf_path: str) -> Dict:
         """Extract blood test data from PDF using selected AI service."""
         # Encode PDF as base64
@@ -262,7 +623,7 @@ Important guidelines:
         
         # Extract using appropriate service
         if self.service == "claude":
-            return self.extract_with_claude(pdf_base64)
+            return self.extract_with_claude(pdf_base64, pdf_path)
         else:  # openai
             return self.extract_with_openai(pdf_base64)
     

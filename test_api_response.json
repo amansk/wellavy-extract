@@ -1,1 +1,0 @@
-{"detail":[{"type":"missing","loc":["header","X-API-Key"],"msg":"Field required","input":null,"url":"https://errors.pydantic.dev/2.11/v/missing"}]}

@@ -55,3 +55,6 @@ test_output/
 # Logs
 *.log
 logs/
+
+# Environment files
+.env.local
