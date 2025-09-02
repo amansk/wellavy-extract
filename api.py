@@ -165,6 +165,7 @@ async def ai_extract_mapped(
         except json.JSONDecodeError:
             logger.warning("Failed to parse database_markers, proceeding without mapping")
     
+    temp_pdf_path = None
     try:
         # Create a temporary file to store the uploaded PDF
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
@@ -172,51 +173,46 @@ async def ai_extract_mapped(
             temp_pdf.write(content)
             temp_pdf_path = temp_pdf.name
         
-        try:
-            # Initialize the Smart AI extractor with automatic document detection
-            extractor = SmartAIExtractor(service="claude", database_markers=markers_list)
-            
-            # Extract data with automatic type detection and routing
-            results = extractor.extract(temp_pdf_path)
-            
-            # Check if we got results
-            if not results.get("results"):
-                raise HTTPException(
-                    status_code=400,
-                    detail="No valid data could be extracted from the PDF"
-                )
-            
-            # Filter out reference ranges if not requested
-            if not include_ranges:
-                for result in results["results"]:
-                    result.pop("min_range", None)
-                    result.pop("max_range", None)
-            
-            # Log mapping statistics if available
-            if "mapping_stats" in results:
-                stats = results["mapping_stats"]
-                logger.info(f"Extraction complete: {stats['total_extracted']} markers, "
-                          f"{stats['successfully_mapped']} mapped, {stats['unmapped']} unmapped")
-            
-            # Extract document detection info
-            doc_detection = results.get("document_detection", {})
-            
-            # Return enhanced response with document type information
-            return {
-                "success": True,
-                "document_type": doc_detection.get("document_type", "unknown"),
-                "confidence": doc_detection.get("confidence", "unknown"),
-                "test_date": results.get("test_date"),
-                "lab_name": doc_detection.get("lab_name") or results.get("lab_name"),
-                "marker_count": len(results.get("results", [])),
-                "mapping_stats": results.get("mapping_stats"),
-                "results": results.get("results", [])
-            }
+        # Initialize the Smart AI extractor with automatic document detection
+        extractor = SmartAIExtractor(service="claude", database_markers=markers_list)
         
-        finally:
-            # Clean up the temporary file
-            Path(temp_pdf_path).unlink(missing_ok=True)
-            
+        # Extract data with automatic type detection and routing
+        results = extractor.extract(temp_pdf_path)
+        
+        # Check if we got results
+        if not results.get("results"):
+            raise HTTPException(
+                status_code=400,
+                detail="No valid data could be extracted from the PDF"
+            )
+        
+        # Filter out reference ranges if not requested
+        if not include_ranges:
+            for result in results["results"]:
+                result.pop("min_range", None)
+                result.pop("max_range", None)
+        
+        # Log mapping statistics if available
+        if "mapping_stats" in results:
+            stats = results["mapping_stats"]
+            logger.info(f"Extraction complete: {stats['total_extracted']} markers, "
+                      f"{stats['successfully_mapped']} mapped, {stats['unmapped']} unmapped")
+        
+        # Extract document detection info
+        doc_detection = results.get("document_detection", {})
+        
+        # Return enhanced response with document type information
+        return {
+            "success": True,
+            "document_type": doc_detection.get("document_type", "unknown"),
+            "confidence": doc_detection.get("confidence", "unknown"),
+            "test_date": results.get("test_date"),
+            "lab_name": doc_detection.get("lab_name") or results.get("lab_name"),
+            "marker_count": len(results.get("results", [])),
+            "mapping_stats": results.get("mapping_stats"),
+            "results": results.get("results", [])
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -225,6 +221,10 @@ async def ai_extract_mapped(
             status_code=500,
             detail=f"Error processing PDF: {str(e)}"
         )
+    finally:
+        # Clean up the temporary file
+        if temp_pdf_path:
+            Path(temp_pdf_path).unlink(missing_ok=True)
 
 
 @app.post("/convert")
