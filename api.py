@@ -69,7 +69,7 @@ async def ai_extract(
         
         # Log received file
         req_logger.info("Received file for ai-extract", 
-                       filename=file.filename, 
+                       file_name=file.filename, 
                        include_ranges=include_ranges)
         
         # Validate file type
@@ -172,7 +172,7 @@ async def ai_extract_mapped(
         
         # Log received file
         req_logger.info("Received file for ai-extract-mapped",
-                       filename=file.filename,
+                       file_name=file.filename,
                        include_ranges=include_ranges)
         
         # Validate file type
@@ -288,7 +288,7 @@ async def convert_pdf_to_csv(
     with RequestLogger(logger, request_id, "/convert") as req_logger:
         # Log received file
         req_logger.info("Received file for convert",
-                       filename=file.filename,
+                       file_name=file.filename,
                        include_ranges=include_ranges,
                        format=format)
         
