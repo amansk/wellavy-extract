@@ -35,8 +35,13 @@ from wellavy_ai_extractor import WellavyAIExtractor
 from inbody_ai_extractor import InBodyAIExtractor
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+try:
+    from logging_config import get_logger
+    logger = get_logger("smart-ai-extractor")
+except ImportError:
+    # Fallback to basic logging if logging_config is not available
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
 
 
 class SmartAIExtractor:
