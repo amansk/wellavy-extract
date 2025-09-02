@@ -41,11 +41,6 @@ def setup_logging(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Always add console handler for development/debugging
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
     # Add BetterStack handler if token is available
     if betterstack_token:
         try:
@@ -57,9 +52,17 @@ def setup_logging(
             logger.addHandler(betterstack_handler)
             logger.info("BetterStack logging initialized successfully")
         except Exception as e:
+            # Fallback to console if BetterStack fails
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
             logger.warning(f"Failed to initialize BetterStack logging: {e}")
             logger.warning("Continuing with console logging only")
     else:
+        # Only use console logging if BetterStack token not available
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
         logger.warning("BETTERSTACK_TOKEN not found - using console logging only")
     
     return logger
