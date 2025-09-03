@@ -171,8 +171,9 @@ Return ONLY the JSON object, no explanations."""
             
         except Exception as e:
             logger.error(f"Error detecting PDF type: {e}")
+            return 'unknown', {"error": str(e)}
             
-        return 'unknown', {"error": str(e)}
+        return 'unknown', {"error": "Unable to parse detection response"}
     
     def extract(self, pdf_path: str) -> Dict:
         """Extract data from PDF using appropriate specialized extractor."""
