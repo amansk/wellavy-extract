@@ -200,7 +200,8 @@ async def ai_extract_mapped(
             req_logger.info("PDF uploaded and stored temporarily", file_size=len(content))
             
             # Initialize the Smart AI extractor with automatic document detection
-            extractor = SmartAIExtractor(service="claude", database_markers=markers_list)
+            extractor = SmartAIExtractor(service="claude", database_markers=markers_list, 
+                                       request_id=request_id, filename=file.filename)
             req_logger.info("Initialized Smart AI extractor", service="claude", has_markers=bool(markers_list))
             
             # Extract data with automatic type detection and routing

@@ -47,9 +47,12 @@ except ImportError:
 class SmartAIExtractor:
     """Smart extractor that automatically detects PDF type and routes to appropriate extractor."""
     
-    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None):
+    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None,
+                 request_id: Optional[str] = None, filename: Optional[str] = None):
         self.service = service.lower()
         self.database_markers = database_markers or []
+        self.request_id = request_id
+        self.filename = filename
         self.client = self._initialize_client()
         
     def _initialize_client(self):
@@ -191,6 +194,7 @@ Return ONLY the JSON object, no explanations."""
             extractor = InBodyAIExtractor(
                 service=self.service,
                 database_markers=self.database_markers
+                # Note: InBodyAIExtractor doesn't support request_id/filename yet
             )
             results = extractor.extract(pdf_path)
             
@@ -198,7 +202,9 @@ Return ONLY the JSON object, no explanations."""
             logger.info("Routing to blood test extractor...")
             extractor = WellavyAIExtractor(
                 service=self.service,
-                database_markers=self.database_markers
+                database_markers=self.database_markers,
+                request_id=self.request_id,
+                filename=self.filename
             )
             results = extractor.extract(pdf_path)
             

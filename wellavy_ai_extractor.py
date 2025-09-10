@@ -73,12 +73,24 @@ except ImportError:
 class WellavyAIExtractor:
     """Wellavy extractor with intelligent database marker mapping."""
     
-    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None, token_limit: int = 30000):
+    def __init__(self, service: str = "claude", database_markers: Optional[List[Dict]] = None, token_limit: int = 30000,
+                 request_id: Optional[str] = None, filename: Optional[str] = None):
         self.service = service.lower()
         self.database_markers = database_markers or []
         self.token_limit = token_limit
+        self.request_id = request_id or "unknown"
+        self.filename = filename or "unknown"
         self.client = self._initialize_client()
         self.token_manager = TokenManager(token_limit) if TOKEN_COUNTING_AVAILABLE else None
+        
+    def _log_with_context(self, level: str, message: str, **extra):
+        """Log message with request context using structured logging."""
+        context = {
+            'request_id': self.request_id,
+            'filename': self.filename,
+            **extra
+        }
+        getattr(logger, level)(message, extra=context)
         
     def _initialize_client(self):
         """Initialize the appropriate AI client based on service selection."""
@@ -121,7 +133,7 @@ class WellavyAIExtractor:
                     
             return "\n".join(text_content)
         except Exception as e:
-            logger.error(f"Error extracting text from PDF: {e}")
+            self._log_with_context("error", f"Error extracting text from PDF: {e}")
             raise
     
     def get_pdf_page_count(self, pdf_path: str) -> int:
@@ -147,7 +159,7 @@ class WellavyAIExtractor:
         markers_tokens = len(str(self.database_markers)) // 3  # Rough estimate
         
         total_estimate = estimated_pdf_tokens + prompt_tokens + markers_tokens
-        logger.info(f"Estimated tokens - Pages: {page_count}, PDF: {estimated_pdf_tokens}, Total: {total_estimate}")
+        self._log_with_context("info", f"Estimated tokens - Pages: {page_count}, PDF: {estimated_pdf_tokens}, Total: {total_estimate}")
         
         return total_estimate
     
@@ -169,7 +181,7 @@ class WellavyAIExtractor:
             # With ~3k tokens per page, 5 pages = 15k tokens
             # Plus 4k prompt + 5k markers = 24k total (under 30k limit)
             
-            logger.info(f"Splitting {total_pages} page PDF into chunks of {max_pages_per_chunk} pages")
+            self._log_with_context("info", f"Splitting {total_pages} page PDF into chunks of {max_pages_per_chunk} pages")
             
             for start_page in range(0, total_pages, max_pages_per_chunk):
                 end_page = min(start_page + max_pages_per_chunk, total_pages)
@@ -187,9 +199,9 @@ class WellavyAIExtractor:
                 chunk_base64 = base64.b64encode(pdf_bytes.read()).decode('utf-8')
                 chunks.append(chunk_base64)
                 
-                logger.info(f"Created chunk {len(chunks)}: pages {start_page+1}-{end_page}")
+                self._log_with_context("info", f"Created chunk {len(chunks)}: pages {start_page+1}-{end_page}")
         
-        logger.info(f"Split PDF into {len(chunks)} chunks")
+        self._log_with_context("info", f"Split PDF into {len(chunks)} chunks")
         return chunks
     
     # DEPRECATED: Old text-based chunking - kept for compatibility
@@ -263,7 +275,7 @@ class WellavyAIExtractor:
         if current_chunk:
             chunks.append(current_chunk)
         
-        logger.info(f"Split PDF into {len(chunks)} chunks")
+        self._log_with_context("info", f"Split PDF into {len(chunks)} chunks")
         return chunks
     
     def create_chunk_extraction_prompt(self, chunk_number: int, total_chunks: int) -> str:
@@ -359,8 +371,9 @@ Important guidelines:
         prompt = self.create_extraction_prompt()
         
         # Log prompt summary
-        logger.info(f"Prompt length: {len(prompt)} characters")
-        logger.info(f"Number of database markers: {len(self.database_markers)}")
+        self._log_with_context("info", "Claude extraction started", 
+                               prompt_length=len(prompt),
+                               database_markers_count=len(self.database_markers))
         
         # Check token count if available
         if pdf_path and PYPDF2_AVAILABLE:
@@ -369,7 +382,7 @@ Important guidelines:
             
             # Check if within limits
             if estimated_tokens > self.token_limit:
-                logger.warning(f"Token limit exceeded: {estimated_tokens} > {self.token_limit}")
+                self._log_with_context("warning", f"Token limit exceeded: {estimated_tokens} > {self.token_limit}")
                 return self._handle_large_document(pdf_path, {"total": estimated_tokens})
         elif TOKEN_COUNTING_AVAILABLE:
             # Fallback to old method if no pdf_path provided
@@ -381,22 +394,22 @@ Important guidelines:
                 database_markers=self.database_markers
             )
             
-            logger.info(f"Estimated tokens (fallback): {token_counts['total']}")
+            self._log_with_context("info", f"Estimated tokens (fallback): {token_counts['total']}")
             
             within_limit, error_msg = check_token_limit(token_counts['total'], self.token_limit)
             
             if not within_limit:
-                logger.warning(f"Token limit exceeded: {error_msg}")
+                self._log_with_context("warning", f"Token limit exceeded: {error_msg}")
                 if pdf_path:
                     return self._handle_large_document(pdf_path, token_counts)
                 else:
-                    logger.error("Cannot chunk without pdf_path")
+                    self._log_with_context("error", "Cannot chunk without pdf_path")
                     raise ValueError("PDF path required for chunking")
             
             # Check if we have capacity in current window
             if self.token_manager and not self.token_manager.can_process(token_counts['total']):
                 wait_time = 60  # Wait 60 seconds for rate limit window to reset
-                logger.info(f"Rate limit approaching, waiting {wait_time} seconds...")
+                self._log_with_context("info", f"Rate limit approaching, waiting {wait_time} seconds...")
                 time.sleep(wait_time)
                 self.token_manager.reset()
             
@@ -433,8 +446,11 @@ Important guidelines:
             # Extract JSON from response
             content = response.content[0].text
             
-            # Log response summary
-            logger.info(f"Claude response length: {len(content)} characters")
+            # Log response summary with filename and full response
+            self._log_with_context("info", "Claude extraction completed", 
+                                   response_length=len(content))
+            self._log_with_context("info", "Claude full response", 
+                                   response_content=content)
             
             # Find JSON in the response
             start_idx = content.find('{')
@@ -445,9 +461,11 @@ Important guidelines:
                 
                 # Try to parse, with better error handling
                 try:
-                    return json.loads(json_str)
+                    result = json.loads(json_str)
+                    self._log_extraction_summary(self.filename, result)
+                    return result
                 except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error: {e}")
+                    self._log_with_context("error", f"JSON decode error: {e}")
                     
                     # Try to clean common issues
                     # Remove trailing commas
@@ -459,17 +477,56 @@ Important guidelines:
                     json_str = json_str.replace('\x00', '').replace('\r', '')
                     
                     try:
-                        return json.loads(json_str)
+                        result = json.loads(json_str)
+                        self._log_extraction_summary(self.filename, result)
+                        return result
                     except Exception as parse_error:
-                        logger.error(f"Failed to parse JSON response: {parse_error}")
+                        self._log_with_context("error", f"Failed to parse JSON response: {parse_error}")
                         raise
             else:
-                logger.error("No JSON found in Claude response")
-                return {"results": [], "test_date": None}
+                self._log_with_context("error", "No JSON found in Claude response")
+                result = {"results": [], "test_date": None}
+                self._log_extraction_summary(self.filename, result)
+                return result
                 
         except Exception as e:
-            logger.error(f"Error with Claude extraction: {e}")
+            self._log_with_context("error", f"Error with Claude extraction: {e}")
             raise
+    
+    def _log_extraction_summary(self, filename: str, result: Dict):
+        """Log detailed extraction summary statistics."""
+        results = result.get("results", [])
+        
+        # Count extraction statistics
+        total_extracted = len(results)
+        mapped_count = 0
+        unmapped_count = 0
+        failed_count = 0
+        
+        # Count mapped vs unmapped markers
+        database_marker_names = set()
+        if isinstance(self.database_markers, list):
+            database_marker_names = {marker.get('name', '').lower() 
+                                   for marker in self.database_markers 
+                                   if marker.get('name')}
+        
+        for res in results:
+            marker_name = res.get("marker", "").lower()
+            value = res.get("value", "")
+            
+            if not value or value.lower() in ["", "not found", "n/a", "null"]:
+                failed_count += 1
+            elif marker_name in database_marker_names:
+                mapped_count += 1
+            else:
+                unmapped_count += 1
+        
+        # Log comprehensive extraction summary
+        self._log_with_context("info", "Extraction summary completed", 
+                               total_extracted=total_extracted,
+                               mapped=mapped_count,
+                               unmapped=unmapped_count,
+                               failed=failed_count)
     
     def extract_with_openai(self, pdf_base64: str) -> Dict:
         """Extract data using OpenAI GPT-4o."""
@@ -503,15 +560,15 @@ Important guidelines:
             return json.loads(response.choices[0].message.content)
                 
         except Exception as e:
-            logger.error(f"Error with OpenAI extraction: {e}")
+            self._log_with_context("error", f"Error with OpenAI extraction: {e}")
             raise
     
     def _handle_large_document(self, pdf_path: str, token_counts: Dict) -> Dict:
         """Handle documents that exceed token limits using PDF page chunking."""
-        logger.info("Document exceeds token limit. Using PDF page chunking...")
+        self._log_with_context("info", "Document exceeds token limit. Using PDF page chunking...")
         
         if not PYPDF2_AVAILABLE:
-            logger.error("PyPDF2 not available. Cannot chunk document.")
+            self._log_with_context("error", "PyPDF2 not available. Cannot chunk document.")
             raise ImportError("PyPDF2 required for PDF chunking")
         
         try:
@@ -523,7 +580,7 @@ Important guidelines:
             test_date = None
             
             for i, pdf_chunk_base64 in enumerate(pdf_chunks, 1):
-                logger.info(f"Processing PDF chunk {i}/{len(pdf_chunks)}")
+                self._log_with_context("info", f"Processing PDF chunk {i}/{len(pdf_chunks)}")
                 
                 # Create prompt for this chunk
                 chunk_prompt = self.create_chunk_extraction_prompt(i, len(pdf_chunks))
@@ -544,14 +601,14 @@ Important guidelines:
                         time.sleep(1)
                         
                 except Exception as e:
-                    logger.error(f"Error processing chunk {i}: {e}")
+                    self._log_with_context("error", f"Error processing chunk {i}: {e}")
                     # Continue with other chunks even if one fails
                     continue
             
             # Merge and deduplicate results
             merged_results = self._merge_chunk_results(all_results)
             
-            logger.info(f"Chunked processing complete: {len(merged_results)} markers from {len(pdf_chunks)} chunks")
+            self._log_with_context("info", f"Chunked processing complete: {len(merged_results)} markers from {len(pdf_chunks)} chunks")
             
             return {
                 "success": True,
@@ -564,7 +621,7 @@ Important guidelines:
             }
             
         except Exception as e:
-            logger.error(f"Error in chunked processing: {e}")
+            self._log_with_context("error", f"Error in chunked processing: {e}")
             raise
     
     def _extract_chunk_with_claude_pdf(self, prompt: str, pdf_chunk_base64: str) -> Dict:
@@ -619,7 +676,7 @@ Important guidelines:
                 return {"results": [], "test_date": None}
                 
         except Exception as e:
-            logger.error(f"Error processing PDF chunk: {e}")
+            self._log_with_context("error", f"Error processing PDF chunk: {e}")
             return {"results": [], "test_date": None}
     
     # DEPRECATED: Old text-based chunk extraction - kept for compatibility
@@ -662,7 +719,7 @@ Important guidelines:
                 return {"results": [], "test_date": None}
                 
         except Exception as e:
-            logger.error(f"Error processing text chunk: {e}")
+            self._log_with_context("error", f"Error processing text chunk: {e}")
             return {"results": [], "test_date": None}
     
     def _merge_chunk_results(self, all_results: List[Dict]) -> List[Dict]:
@@ -701,7 +758,7 @@ Important guidelines:
         merged_results = list(unique_markers.values())
         merged_results.sort(key=lambda x: x.get('marker', '').lower())
         
-        logger.info(f"Merged {len(all_results)} raw results into {len(merged_results)} unique markers")
+        self._log_with_context("info", f"Merged {len(all_results)} raw results into {len(merged_results)} unique markers")
         return merged_results
     
     def _extract_with_claude_basic(self, pdf_base64: str) -> Dict:
@@ -758,11 +815,15 @@ Important guidelines:
                 return {"results": [], "test_date": None}
                 
         except Exception as e:
-            logger.error(f"Error with Claude extraction: {e}")
+            self._log_with_context("error", f"Error with Claude extraction: {e}")
             raise
     
     def extract(self, pdf_path: str) -> Dict:
         """Extract blood test data from PDF using selected AI service."""
+        # Update filename if not already set or if different
+        if self.filename == "unknown" or pdf_path:
+            self.filename = pdf_path.split('/')[-1] if pdf_path else "unknown"
+            
         # Encode PDF as base64
         pdf_base64 = self.encode_pdf_to_base64(pdf_path)
         
