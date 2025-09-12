@@ -87,7 +87,7 @@ class WellavyAIExtractor:
         """Log message with request context using structured logging."""
         context = {
             'request_id': self.request_id,
-            'filename': self.filename,
+            'file_name': self.filename,
             **extra
         }
         getattr(logger, level)(message, extra=context)
