@@ -8,6 +8,8 @@ import json
 import logging
 from typing import Dict, List, Optional, Tuple
 
+from claude_api import EXTRACTION_MODEL
+
 logger = logging.getLogger(__name__)
 
 def estimate_token_count(text: str) -> int:
@@ -25,28 +27,35 @@ def estimate_token_count(text: str) -> int:
     return len(text) // 3
 
 
-def count_anthropic_tokens(client, text: str, model: str = "claude-3-5-sonnet-20241022") -> int:
+def count_anthropic_tokens(client, text: str, model: str = EXTRACTION_MODEL) -> int:
     """
-    Count tokens using Anthropic's token counting method.
-    
+    Count tokens using Anthropic's token counting endpoint.
+
     Args:
         client: Anthropic client instance
         text: Text to count tokens for
-        model: Model to use for counting
-        
+        model: Model to count against. Counts are model-specific - the
+            tokenizer changed with Opus 4.7, so the same text costs noticeably
+            more tokens than it did on the Claude 3.x models this function
+            originally defaulted to. Any threshold tuned against those older
+            counts needs re-baselining rather than carrying over.
+
     Returns:
-        Exact token count
+        Exact token count, or a conservative estimate if the call fails.
     """
     try:
-        # Use Anthropic's built-in token counting
         from anthropic import Anthropic
         if isinstance(client, Anthropic):
-            # Anthropic SDK v0.59.0 has count_tokens method
-            token_count = client.count_tokens(text)
-            return token_count
+            # The top-level client.count_tokens() helper this used to call was
+            # removed from the SDK; counting now goes through the messages
+            # namespace and requires the model, since counts are per-tokenizer.
+            return client.messages.count_tokens(
+                model=model,
+                messages=[{"role": "user", "content": text}],
+            ).input_tokens
     except Exception as e:
         logger.warning(f"Could not use Anthropic token counting: {e}")
-    
+
     # Fallback to estimation
     return estimate_token_count(text)
 

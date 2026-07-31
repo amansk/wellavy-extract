@@ -23,12 +23,34 @@ try:
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
-    
+
+from claude_api import (
+    DETECTION_EFFORT,
+    DETECTION_MAX_TOKENS,
+    DETECTION_MODEL,
+    NoTextContentError,
+    TruncatedResponseError,
+    first_text,
+)
+
 try:
+    import openai
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+
+# Failures that mean "we could not ask the model", as opposed to "the model
+# told us this document is unsupported". Only the latter should degrade to a
+# document type of 'unknown'; see detect_pdf_type.
+DETECTION_INFRASTRUCTURE_ERRORS = tuple(
+    exc for exc in (
+        anthropic.APIError if ANTHROPIC_AVAILABLE else None,
+        openai.APIError if OPENAI_AVAILABLE else None,
+        TruncatedResponseError,
+        NoTextContentError,
+    ) if exc is not None
+)
 
 # Import specialized extractors
 from wellavy_ai_extractor import WellavyAIExtractor
@@ -104,9 +126,9 @@ Return ONLY the JSON object, no explanations."""
         try:
             if self.service == "claude":
                 response = self.client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=1000,
-                    temperature=0,
+                    model=DETECTION_MODEL,
+                    max_tokens=DETECTION_MAX_TOKENS,
+                    output_config=DETECTION_EFFORT,
                     messages=[
                         {
                             "role": "user", 
@@ -128,8 +150,8 @@ Return ONLY the JSON object, no explanations."""
                     ]
                 )
                 
-                content = response.content[0].text
-                
+                content = first_text(response)
+
             else:  # OpenAI
                 response = self.client.chat.completions.create(
                     model="gpt-4o",
@@ -172,10 +194,20 @@ Return ONLY the JSON object, no explanations."""
                 
                 return detection_result.get('document_type', 'unknown'), detection_result
             
+        except DETECTION_INFRASTRUCTURE_ERRORS as e:
+            # An unreachable or misconfigured model is not a statement about the
+            # document. Returning 'unknown' here routes to no extractor at all,
+            # so the request completes with zero markers and the caller gets a
+            # 400 blaming their PDF - which is exactly how a retired model ID
+            # went unnoticed through four consecutive imports in July 2026.
+            # Let it propagate so the endpoint fails loudly instead.
+            logger.error(f"Document type detection failed against the model API: {e}")
+            raise
+
         except Exception as e:
             logger.error(f"Error detecting PDF type: {e}")
             return 'unknown', {"error": str(e)}
-            
+
         return 'unknown', {"error": "Unable to parse detection response"}
     
     def extract(self, pdf_path: str) -> Dict:

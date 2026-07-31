@@ -6,6 +6,8 @@ pdfplumber==0.10.3
 python-dateutil==2.8.2
 click==8.1.7
 python-dotenv==1.0.0
-anthropic==0.59.0
+# 0.59.0 predates the output_config parameter, so it cannot express the effort
+# setting the detection call passes and rejects it as an unexpected keyword.
+anthropic==0.120.2
 openai==1.12.0
 logtail-python

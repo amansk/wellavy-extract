@@ -13,6 +13,12 @@ from typing import Dict, List, Tuple, Optional
 import click
 from dotenv import load_dotenv
 
+from claude_api import (
+    EXTRACTION_MAX_TOKENS,
+    EXTRACTION_MODEL,
+    first_text,
+)
+
 # Load environment variables
 load_dotenv('.env.local')
 
@@ -110,9 +116,8 @@ Important guidelines:
         
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                temperature=0,
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
                 messages=[
                     {
                         "role": "user", 
@@ -135,7 +140,7 @@ Important guidelines:
             )
             
             # Extract JSON from response
-            content = response.content[0].text
+            content = first_text(response)
             # Find JSON in the response
             start_idx = content.find('{')
             end_idx = content.rfind('}') + 1

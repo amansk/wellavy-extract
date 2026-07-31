@@ -16,6 +16,12 @@ from typing import Dict, List, Tuple, Optional
 import click
 from dotenv import load_dotenv
 
+from claude_api import (
+    EXTRACTION_MAX_TOKENS,
+    EXTRACTION_MODEL,
+    first_text,
+)
+
 # Import PDF processing
 try:
     import pdfplumber
@@ -419,9 +425,8 @@ Important guidelines:
         
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,  # Increased to handle larger responses
-                temperature=0,
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
                 messages=[
                     {
                         "role": "user", 
@@ -444,7 +449,7 @@ Important guidelines:
             )
             
             # Extract JSON from response
-            content = response.content[0].text
+            content = first_text(response)
             
             # Log response summary with filename and full response
             self._log_with_context("info", "Claude extraction completed", 
@@ -628,9 +633,8 @@ Important guidelines:
         """Extract data from a PDF chunk using Claude - sends actual PDF, not text!"""
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,
-                temperature=0,
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
                 messages=[
                     {
                         "role": "user",
@@ -653,7 +657,7 @@ Important guidelines:
             )
             
             # Extract JSON from response
-            content = response.content[0].text
+            content = first_text(response)
             
             # Find JSON in the response
             start_idx = content.find('{')
@@ -684,9 +688,8 @@ Important guidelines:
         """DEPRECATED: Extract data from a text chunk using Claude."""
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,
-                temperature=0,
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
                 messages=[
                     {
                         "role": "user", 
@@ -696,7 +699,7 @@ Important guidelines:
             )
             
             # Extract JSON from response
-            content = response.content[0].text
+            content = first_text(response)
             
             # Find JSON in the response
             start_idx = content.find('{')
@@ -767,9 +770,8 @@ Important guidelines:
         
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,
-                temperature=0,
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
                 messages=[
                     {
                         "role": "user", 
@@ -792,7 +794,7 @@ Important guidelines:
             )
             
             # Extract JSON from response
-            content = response.content[0].text
+            content = first_text(response)
             
             # Find JSON in the response
             start_idx = content.find('{')
